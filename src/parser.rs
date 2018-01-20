@@ -35,6 +35,23 @@ impl<'a> TokenIterator<'a> {
                                 self.chars.next();
                             },
 
+                            // Try to parse a floating point number
+                            '.' => {
+                                digits.push(n);
+                                self.chars.next();
+
+                                while let Some(&decimal) = self.chars.peek() {
+                                    match decimal {
+                                        '0'...'9' => {
+                                            digits.push(decimal);
+                                            self.chars.next();
+                                        }
+
+                                        _ => break,
+                                    }
+                                }
+                            }
+
                             _ => {
                                 break;
                             },
@@ -47,9 +64,11 @@ impl<'a> TokenIterator<'a> {
                     if let Ok(num) = result.parse::<i64>() {
                         return Some(Token::Int(num));
                     }
-                    else {
-                        return Some(Token::MalformedNumber(row, col));
+                    else if let Ok(num) = result.parse::<f64>() {
+                        return Some(Token::Float(num));
                     }
+
+                    return Some(Token::MalformedNumber(row, col));
                 },
 
                 '\n' => {
@@ -80,5 +99,14 @@ mod tests {
 
         let token = it.next_token();
         assert_eq!(token, Some(Token::Int(123)));
+    }
+
+    #[test]
+    fn test_float() {
+        let input = "1.23";
+        let mut it = TokenIterator::new(input.chars().peekable());
+
+        let token = it.next_token();
+        assert_eq!(token, Some(Token::Float(1.23)));
     }
 }
