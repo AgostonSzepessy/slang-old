@@ -3,4 +3,8 @@ name = "slang"
 version = "0.1.0"
 authors = ["Agoston Szepessy <agszepp@gmail.com>"]
 
+[lib]
+name = "slang"
+path = "src/lib.rs"
+
 [dependencies]

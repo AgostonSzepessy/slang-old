@@ -1,3 +1,4 @@
+#[derive(Debug, PartialEq)]
 pub enum Token {
     // Single character tokens
     Comma,
@@ -47,4 +48,7 @@ pub enum Token {
     Val,
     Var,
     While,
+
+    // Error tokens
+    MalformedNumber(u32, u32)
 }
