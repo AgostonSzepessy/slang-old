@@ -92,6 +92,25 @@ impl<'a> TokenIterator<'a> {
                                 radix = Some(8);
                             }
 
+                            // Parse binary numbers
+                            'b' => {
+                                digits.push(n);
+                                self.chars.next();
+
+                                while let Some(&bin) = self.chars.peek() {
+                                    match bin {
+                                        '0'...'1' => {
+                                            digits.push(bin);
+                                            self.chars.next();
+                                        }
+
+                                        _ => break,
+                                    }
+                                }
+
+                                radix = Some(2);
+                            }
+
                             _ => {
                                 break;
                             },
@@ -154,4 +173,5 @@ mod tests {
     gen_num_test!(test_float, "1.23", Some(Token::Float(1.23)));
     gen_num_test!(test_hex, "0xAB12", Some(Token::Int(0xAB12)));
     gen_num_test!(test_octal, "0o12", Some(Token::Int(0o12)));
+    gen_num_test!(test_binary, "0b11", Some(Token::Int(0b11)));
 }
