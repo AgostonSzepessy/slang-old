@@ -50,5 +50,5 @@ pub enum Token {
     While,
 
     // Error tokens
-    MalformedNumber(u32, u32)
+    MalformedNumber(u32)
 }

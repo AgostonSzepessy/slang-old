@@ -17,7 +17,6 @@ impl<'a> TokenIterator<'a> {
 
     pub fn next_token(&mut self) -> Option<Token> {
         let mut row = 1;
-        let mut col = 1;
 
         while let Some(c) = self.chars.next() {
             match c {
@@ -26,6 +25,8 @@ impl<'a> TokenIterator<'a> {
                     // Create vector to store individual digits
                     let mut digits = Vec::new();
                     digits.push(c);
+
+                    let mut radix = None;
 
                     // Check if next digit is a number
                     while let Some(&n) = self.chars.peek() {
@@ -52,6 +53,24 @@ impl<'a> TokenIterator<'a> {
                                 }
                             }
 
+                            'x' => {
+                                digits.push(n);
+                                self.chars.next();
+
+                                while let Some(&hex) = self.chars.peek() {
+                                    match hex {
+                                        '0'...'9' | 'a'...'f' | 'A'...'F' => {
+                                            digits.push(hex);
+                                            self.chars.next();
+                                        }
+
+                                        _ => break,
+                                    }
+                                }
+
+                                radix = Some(16);
+                            }
+
                             _ => {
                                 break;
                             },
@@ -61,6 +80,14 @@ impl<'a> TokenIterator<'a> {
                     // Convert string into number
                     let result: String = digits.into_iter().collect();
 
+                    if let Some(base) = radix {
+                        if let Ok(num) = i64::from_str_radix(&result[2..], base) {
+                            return Some(Token::Int(num));
+                        }
+
+                        return Some(Token::MalformedNumber(row)); 
+                    }
+
                     if let Ok(num) = result.parse::<i64>() {
                         return Some(Token::Int(num));
                     }
@@ -68,12 +95,11 @@ impl<'a> TokenIterator<'a> {
                         return Some(Token::Float(num));
                     }
 
-                    return Some(Token::MalformedNumber(row, col));
+                    return Some(Token::MalformedNumber(row));
                 },
 
                 '\n' => {
                     row += 1;
-                    col = 0;
                 },
 
                 _ => {
@@ -81,7 +107,6 @@ impl<'a> TokenIterator<'a> {
                 }
             }
 
-            col += 1;
         }
 
         None
@@ -106,4 +131,5 @@ mod tests {
 
     gen_num_test!(test_int, "123", Some(Token::Int(123)));
     gen_num_test!(test_float, "1.23", Some(Token::Float(1.23)));
+    gen_num_test!(test_hex, "0xAB12", Some(Token::Int(0xAB12)));
 }
