@@ -19,6 +19,7 @@ impl<'a> TokenIterator<'a> {
         let mut row = 1;
 
         while let Some(c) = self.chars.next() {
+            // TODO: Scan identifiers before numbers
             match c {
                 // Found something that starts with a number
                 '0'...'9' => {
@@ -53,6 +54,7 @@ impl<'a> TokenIterator<'a> {
                                 }
                             }
 
+                            // Parse hexadecimals
                             'x' => {
                                 digits.push(n);
                                 self.chars.next();
@@ -69,6 +71,25 @@ impl<'a> TokenIterator<'a> {
                                 }
 
                                 radix = Some(16);
+                            }
+
+                            // Parse octal numbers
+                            'o' => {
+                                digits.push(n);
+                                self.chars.next();
+
+                                while let Some(&oct) = self.chars.peek() {
+                                    match oct { 
+                                        '0'...'7' => {
+                                            digits.push(oct);
+                                            self.chars.next();
+                                        }
+
+                                        _ => break,
+                                    }
+                                }
+
+                                radix = Some(8);
                             }
 
                             _ => {
@@ -132,4 +153,5 @@ mod tests {
     gen_num_test!(test_int, "123", Some(Token::Int(123)));
     gen_num_test!(test_float, "1.23", Some(Token::Float(1.23)));
     gen_num_test!(test_hex, "0xAB12", Some(Token::Int(0xAB12)));
+    gen_num_test!(test_octal, "0o12", Some(Token::Int(0o12)));
 }

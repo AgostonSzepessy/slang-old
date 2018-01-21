@@ -50,5 +50,6 @@ pub enum Token {
     While,
 
     // Error tokens
-    MalformedNumber(u32)
+    MalformedNumber(u32),
+    UnexpectedCharacter(String, u32),
 }
