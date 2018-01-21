@@ -40,7 +40,7 @@ pub enum Token {
     False,
     For,
     Fn,
-    Null,
+    None,
     Super,
     Ret,
     This,

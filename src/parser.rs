@@ -19,8 +19,47 @@ impl<'a> TokenIterator<'a> {
         let mut row = 1;
 
         while let Some(c) = self.chars.next() {
-            // TODO: Scan identifiers before numbers
             match c {
+                // Parse an identifier
+                'a'...'z' | 'A'...'Z' | '_' => {
+                    let mut chars = Vec::new();
+                    chars.push(c);
+
+                    // Keep scanning until we come across something that isn't
+                    // alpha-numeric or an underscore.
+                    while let Some(&ch) = self.chars.peek() {
+                        match ch {
+                            '0'...'9' | 'a'...'z' | 'A'...'Z' | '_' => {
+                                chars.push(ch);
+                                self.chars.next();
+                            }
+
+                            _ => break,
+                        }
+                    }
+
+                    let identifier: String = chars.into_iter().collect();
+
+                    match identifier.as_ref() {
+                        "and" => return Some(Token::And),
+                        "class" => return Some(Token::Class),
+                        "if" => return Some(Token::If),
+                        "else" => return Some(Token::Else),
+                        "false" => return Some(Token::False),
+                        "for" => return Some(Token::For),
+                        "fn" => return Some(Token::Fn),
+                        "none" => return Some(Token::None),
+                        "super" => return Some(Token::Super),
+                        "ret" => return Some(Token::Ret),
+                        "this" => return Some(Token::This),
+                        "true" => return Some(Token::True),
+                        "val" => return Some(Token::Val),
+                        "var" => return Some(Token::Var),
+                        "while" => return Some(Token::While),
+                        _ => return Some(Token::Identifier(identifier)),
+                    }
+                }
+
                 // Found something that starts with a number
                 '0'...'9' => {
                     // Create vector to store individual digits
@@ -157,7 +196,7 @@ impl<'a> TokenIterator<'a> {
 mod tests {
     use super::*;
 
-    macro_rules! gen_num_test {
+    macro_rules! gen_test {
         ($name: ident, $input: expr, $expected_res: expr) => {
             #[test]
             fn $name() {
@@ -169,9 +208,27 @@ mod tests {
         }
     }
 
-    gen_num_test!(test_int, "123", Some(Token::Int(123)));
-    gen_num_test!(test_float, "1.23", Some(Token::Float(1.23)));
-    gen_num_test!(test_hex, "0xAB12", Some(Token::Int(0xAB12)));
-    gen_num_test!(test_octal, "0o12", Some(Token::Int(0o12)));
-    gen_num_test!(test_binary, "0b11", Some(Token::Int(0b11)));
+    // Test numbers
+    gen_test!(test_int, "123", Some(Token::Int(123)));
+    gen_test!(test_float, "1.23", Some(Token::Float(1.23)));
+    gen_test!(test_hex, "0xAB12", Some(Token::Int(0xAB12)));
+    gen_test!(test_octal, "0o12", Some(Token::Int(0o12)));
+    gen_test!(test_binary, "0b11", Some(Token::Int(0b11)));
+
+    // Test keywords
+    gen_test!(test_and, "and", Some(Token::And));
+    gen_test!(test_class, "class", Some(Token::Class));
+    gen_test!(test_if, "if", Some(Token::If));
+    gen_test!(test_else, "else", Some(Token::Else));
+    gen_test!(test_false, "false", Some(Token::False));
+    gen_test!(test_for, "for", Some(Token::For));
+    gen_test!(test_fn, "fn", Some(Token::Fn));
+    gen_test!(test_super, "super", Some(Token::Super));
+    gen_test!(test_ret, "ret", Some(Token::Ret));
+    gen_test!(test_this, "this", Some(Token::This));
+    gen_test!(test_true, "true", Some(Token::True));
+    gen_test!(test_val, "val", Some(Token::Val));
+    gen_test!(test_var, "var", Some(Token::Var));
+    gen_test!(test_while, "while", Some(Token::While));
+    gen_test!(test_identifier, "foo", Some(Token::Identifier("foo".to_string())));
 }
