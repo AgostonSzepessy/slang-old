@@ -92,21 +92,18 @@ impl<'a> TokenIterator<'a> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_int() {
-        let input = "123";
-        let mut it = TokenIterator::new(input.chars().peekable());
+    macro_rules! gen_num_test {
+        ($name: ident, $input: expr, $expected_res: expr) => {
+            #[test]
+            fn $name() {
+                let mut it = TokenIterator::new($input.chars().peekable());
+                let token = it.next_token();
 
-        let token = it.next_token();
-        assert_eq!(token, Some(Token::Int(123)));
+                assert_eq!(token, $expected_res);
+            }
+        }
     }
 
-    #[test]
-    fn test_float() {
-        let input = "1.23";
-        let mut it = TokenIterator::new(input.chars().peekable());
-
-        let token = it.next_token();
-        assert_eq!(token, Some(Token::Float(1.23)));
-    }
+    gen_num_test!(test_int, "123", Some(Token::Int(123)));
+    gen_num_test!(test_float, "1.23", Some(Token::Float(1.23)));
 }
