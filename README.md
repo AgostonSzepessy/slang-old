@@ -10,5 +10,8 @@ cd slang
 cargo build
 ```
 
+## Tutorial
+To get an overview of Slang, read [Slang Overview](language.md).
+
 ## License
 Slang is licensed under the Mozilla Public License, version 2.0.
