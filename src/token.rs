@@ -35,18 +35,18 @@ pub enum Token {
     // Keywords
     And,
     Class,
+    Const,
     If,
     Else,
     False,
     For,
     Fn,
+    Let,
     None,
     Super,
     Ret,
     This,
     True,
-    Val,
-    Var,
     While,
 
     // Error tokens

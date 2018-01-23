@@ -43,18 +43,18 @@ impl<'a> TokenIterator<'a> {
                     match identifier.as_ref() {
                         "and" => return Some(Token::And),
                         "class" => return Some(Token::Class),
+                        "const" => return Some(Token::Const),
                         "if" => return Some(Token::If),
                         "else" => return Some(Token::Else),
                         "false" => return Some(Token::False),
                         "for" => return Some(Token::For),
                         "fn" => return Some(Token::Fn),
+                        "let" => return Some(Token::Let),
                         "none" => return Some(Token::None),
                         "super" => return Some(Token::Super),
                         "ret" => return Some(Token::Ret),
                         "this" => return Some(Token::This),
                         "true" => return Some(Token::True),
-                        "val" => return Some(Token::Val),
-                        "var" => return Some(Token::Var),
                         "while" => return Some(Token::While),
                         _ => return Some(Token::Identifier(identifier)),
                     }
@@ -218,17 +218,18 @@ mod tests {
     // Test keywords
     gen_test!(test_and, "and", Some(Token::And));
     gen_test!(test_class, "class", Some(Token::Class));
+    gen_test!(test_const, "const", Some(Token::Const));
     gen_test!(test_if, "if", Some(Token::If));
     gen_test!(test_else, "else", Some(Token::Else));
     gen_test!(test_false, "false", Some(Token::False));
     gen_test!(test_for, "for", Some(Token::For));
     gen_test!(test_fn, "fn", Some(Token::Fn));
+    gen_test!(test_let, "let", Some(Token::Let));
+    gen_test!(test_none, "none", Some(Token::None));
     gen_test!(test_super, "super", Some(Token::Super));
     gen_test!(test_ret, "ret", Some(Token::Ret));
     gen_test!(test_this, "this", Some(Token::This));
     gen_test!(test_true, "true", Some(Token::True));
-    gen_test!(test_val, "val", Some(Token::Val));
-    gen_test!(test_var, "var", Some(Token::Var));
     gen_test!(test_while, "while", Some(Token::While));
     gen_test!(test_identifier, "foo", Some(Token::Identifier("foo".to_string())));
 }
