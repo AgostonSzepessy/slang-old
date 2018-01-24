@@ -179,6 +179,16 @@ impl<'a> TokenIterator<'a> {
                     return Some(Token::Error(TokenError::MalformedNumber(result, row)));
                 },
 
+                ',' => return Some(Token::Comma),
+                '.' => return Some(Token::Dot),
+                ':' => return Some(Token::Colon),
+                '(' => return Some(Token::LeftParen),
+                ')' => return Some(Token::RightParen),
+                '[' => return Some(Token::LeftBracket),
+                ']' => return Some(Token::RightBracket),
+                '{' => return Some(Token::LeftBrace),
+                '}' => return Some(Token::RightBrace),
+
                 '\n' => {
                     row += 1;
                 },
@@ -209,6 +219,16 @@ mod tests {
             }
         }
     }
+
+    gen_test!(test_comma, ",", Some(Token::Comma));
+    gen_test!(test_dot, ".", Some(Token::Dot));
+    gen_test!(test_colon, ":", Some(Token::Colon));
+    gen_test!(test_leftparen, "(", Some(Token::LeftParen));
+    gen_test!(test_rightparen, ")", Some(Token::RightParen));
+    gen_test!(test_leftbracket, "[", Some(Token::LeftBracket));
+    gen_test!(test_rightbracket, "]", Some(Token::RightBracket));
+    gen_test!(left_brace, "{", Some(Token::LeftBrace));
+    gen_test!(right_brace, "}", Some(Token::RightBrace));
 
     // Test numbers
     gen_test!(test_int, "123", Some(Token::Int(123)));
