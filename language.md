@@ -11,7 +11,7 @@ print("Hello there!");
 ```
 
 ## Data Types
-Slang has 5 data types: integers, floats, booleans, strings and objects.
+Slang has 6 data types: integers, floats, booleans, strings, arrays and objects.
 
 ## Variables
 Variables are declared with the `let` keyword.
@@ -54,11 +54,29 @@ Objects are assigned to variables, and to create a new instance, use the `clone(
 ### Examples
 ```
 let obj = {
+    # Instance variable
     let a = 0;
+    # Static variable shared between instances
+    static variable = "foo";
+    # Constant variable
+    const CONSTANT = 5.0;
 
     fn do_things() {
         a += 2;
         
         ret a;
+    }
+
+    fn new() {
+        let o = clone(self);
+        return o;
+    }
+
+    fn foo(self) {
+
+    }
+
+    static fn func() {
+
     }
 }

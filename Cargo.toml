@@ -8,3 +8,4 @@ name = "slang"
 path = "src/lib.rs"
 
 [dependencies]
+failure = "0.1.1"

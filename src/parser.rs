@@ -2,7 +2,7 @@ use std::iter::Peekable;
 use std::iter::Iterator;
 use std::str::Chars;
 
-use token::Token;
+use token::{Token, TokenError};
 
 pub struct TokenIterator<'a> {
     chars: Peekable<Chars<'a>>,
@@ -43,6 +43,7 @@ impl<'a> TokenIterator<'a> {
                     match identifier.as_ref() {
                         "and" => return Some(Token::And),
                         "class" => return Some(Token::Class),
+                        "clone" => return Some(Token::Clone),
                         "const" => return Some(Token::Const),
                         "if" => return Some(Token::If),
                         "else" => return Some(Token::Else),
@@ -51,6 +52,7 @@ impl<'a> TokenIterator<'a> {
                         "fn" => return Some(Token::Fn),
                         "let" => return Some(Token::Let),
                         "none" => return Some(Token::None),
+                        "static" => return Some(Token::Static),
                         "super" => return Some(Token::Super),
                         "ret" => return Some(Token::Ret),
                         "this" => return Some(Token::This),
@@ -164,7 +166,7 @@ impl<'a> TokenIterator<'a> {
                             return Some(Token::Int(num));
                         }
 
-                        return Some(Token::MalformedNumber(row)); 
+                        return Some(Token::Error(TokenError::MalformedNumber(result, row))); 
                     }
 
                     if let Ok(num) = result.parse::<i64>() {
@@ -174,7 +176,7 @@ impl<'a> TokenIterator<'a> {
                         return Some(Token::Float(num));
                     }
 
-                    return Some(Token::MalformedNumber(row));
+                    return Some(Token::Error(TokenError::MalformedNumber(result, row)));
                 },
 
                 '\n' => {
@@ -218,6 +220,7 @@ mod tests {
     // Test keywords
     gen_test!(test_and, "and", Some(Token::And));
     gen_test!(test_class, "class", Some(Token::Class));
+    gen_test!(test_clone, "clone", Some(Token::Clone));
     gen_test!(test_const, "const", Some(Token::Const));
     gen_test!(test_if, "if", Some(Token::If));
     gen_test!(test_else, "else", Some(Token::Else));
@@ -226,6 +229,7 @@ mod tests {
     gen_test!(test_fn, "fn", Some(Token::Fn));
     gen_test!(test_let, "let", Some(Token::Let));
     gen_test!(test_none, "none", Some(Token::None));
+    gen_test!(test_static, "static", Some(Token::Static));
     gen_test!(test_super, "super", Some(Token::Super));
     gen_test!(test_ret, "ret", Some(Token::Ret));
     gen_test!(test_this, "this", Some(Token::This));

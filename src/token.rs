@@ -1,3 +1,11 @@
+#[derive(Debug, Fail, PartialEq)]
+pub enum TokenError {
+    #[fail(display = "Encountered malformed number {} on line {}", _0, _1)]
+    MalformedNumber(String, u32),
+    #[fail(display = "Encountered unexpected character {} on line {}", _0, _1)]
+    UnexpectedCharacter(String, u32),
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Token {
     // Single character tokens
@@ -35,6 +43,7 @@ pub enum Token {
     // Keywords
     And,
     Class,
+    Clone,
     Const,
     If,
     Else,
@@ -43,6 +52,7 @@ pub enum Token {
     Fn,
     Let,
     None,
+    Static,
     Super,
     Ret,
     This,
@@ -50,6 +60,5 @@ pub enum Token {
     While,
 
     // Error tokens
-    MalformedNumber(u32),
-    UnexpectedCharacter(String, u32),
+    Error(TokenError),
 }
