@@ -16,6 +16,20 @@ impl<'a> TokenIterator<'a> {
     }
 
     pub fn next_token(&mut self) -> Option<Token> {
+        // Used for parsing operators that have an equal sign as a part of them
+        // Examples: +=, -=, !=, etc
+        macro_rules! parse_op_equal_case {
+            ($token: expr, $eq_token: expr) => {{
+                match self.chars.peek() {
+                    Some(&'=') => { 
+                        self.chars.next();
+                        return Some($eq_token);
+                    }
+                    _ => return Some($token),
+                }
+            }}
+        }
+
         let mut row = 1;
 
         while let Some(c) = self.chars.next() {
@@ -179,6 +193,7 @@ impl<'a> TokenIterator<'a> {
                     return Some(Token::Error(TokenError::MalformedNumber(result, row)));
                 },
 
+                // Parse single character tokens
                 ',' => return Some(Token::Comma),
                 '.' => return Some(Token::Dot),
                 ':' => return Some(Token::Colon),
@@ -188,6 +203,18 @@ impl<'a> TokenIterator<'a> {
                 ']' => return Some(Token::RightBracket),
                 '{' => return Some(Token::LeftBrace),
                 '}' => return Some(Token::RightBrace),
+                ';' => return Some(Token::Semicolon),
+
+                // Parse single or double character tokens
+                '!' => parse_op_equal_case!(Token::Bang, Token::BangEq),
+                '=' => parse_op_equal_case!(Token::Eq, Token::EqEq),
+                '>' => parse_op_equal_case!(Token::Greater, Token::GreaterEq),
+                '<' => parse_op_equal_case!(Token::Less, Token::LessEq),
+                '%' => parse_op_equal_case!(Token::Percent, Token::PercentEq),
+                '+' => parse_op_equal_case!(Token::Plus, Token::PlusEq),
+                '-' => parse_op_equal_case!(Token::Minus, Token::MinusEq),
+                '/' => parse_op_equal_case!(Token::Slash, Token::SlashEq),
+                '*' => parse_op_equal_case!(Token::Star, Token::StarEq),
 
                 '\n' => {
                     row += 1;
@@ -223,12 +250,33 @@ mod tests {
     gen_test!(test_comma, ",", Some(Token::Comma));
     gen_test!(test_dot, ".", Some(Token::Dot));
     gen_test!(test_colon, ":", Some(Token::Colon));
-    gen_test!(test_leftparen, "(", Some(Token::LeftParen));
-    gen_test!(test_rightparen, ")", Some(Token::RightParen));
-    gen_test!(test_leftbracket, "[", Some(Token::LeftBracket));
-    gen_test!(test_rightbracket, "]", Some(Token::RightBracket));
-    gen_test!(left_brace, "{", Some(Token::LeftBrace));
-    gen_test!(right_brace, "}", Some(Token::RightBrace));
+    gen_test!(test_left_paren, "(", Some(Token::LeftParen));
+    gen_test!(test_right_paren, ")", Some(Token::RightParen));
+    gen_test!(test_left_bracket, "[", Some(Token::LeftBracket));
+    gen_test!(test_right_bracket, "]", Some(Token::RightBracket));
+    gen_test!(test_left_brace, "{", Some(Token::LeftBrace));
+    gen_test!(test_right_brace, "}", Some(Token::RightBrace));
+    gen_test!(test_semicolon, ";", Some(Token::Semicolon));
+
+    // Test single or double character tokens
+    gen_test!(test_bang, "!", Some(Token::Bang));
+    gen_test!(test_bang_eq, "!=", Some(Token::BangEq));
+    gen_test!(test_eq, "=", Some(Token::Eq));
+    gen_test!(test_eq_eq, "==", Some(Token::EqEq));
+    gen_test!(test_greater, ">", Some(Token::Greater));
+    gen_test!(test_gerater_eq, ">=", Some(Token::GreaterEq));
+    gen_test!(test_less, "<", Some(Token::Less));
+    gen_test!(test_less_eq, "<=", Some(Token::LessEq));
+    gen_test!(test_percent, "%", Some(Token::Percent));
+    gen_test!(test_percent_eq, "%=", Some(Token::PercentEq));
+    gen_test!(test_plus, "+", Some(Token::Plus));
+    gen_test!(test_plus_eq, "+=", Some(Token::PlusEq));
+    gen_test!(test_minus, "-", Some(Token::Minus));
+    gen_test!(test_minus_eq, "-=", Some(Token::MinusEq));
+    gen_test!(test_slash, "/", Some(Token::Slash));
+    gen_test!(test_slash_eq, "/=", Some(Token::SlashEq));
+    gen_test!(test_star, "*", Some(Token::Star));
+    gen_test!(test_star_eq, "*=", Some(Token::StarEq));
 
     // Test numbers
     gen_test!(test_int, "123", Some(Token::Int(123)));

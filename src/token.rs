@@ -18,10 +18,6 @@ pub enum Token {
     RightBracket,
     LeftBrace,
     RightBrace,
-    Plus,
-    Minus,
-    Slash,
-    Star,
     Semicolon,
 
     // One or two character tokens
@@ -33,6 +29,16 @@ pub enum Token {
     GreaterEq,
     Less,
     LessEq,
+    Percent,
+    PercentEq,
+    Plus,
+    PlusEq,
+    Minus,
+    MinusEq,
+    Slash,
+    SlashEq,
+    Star,
+    StarEq,
 
     // Literals
     Int(i64),

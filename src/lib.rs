@@ -2,4 +2,4 @@
 extern crate failure;
 
 pub mod token;
-pub mod parser;
+pub mod tokenizer;
