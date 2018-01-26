@@ -14,4 +14,5 @@ cargo build
 To get an overview of Slang, read [Slang Overview](language.md).
 
 ## License
-Slang is licensed under the Mozilla Public License, version 2.0.
+Slang is licensed under the Mozilla Public License, version 2.0. For more details,
+see [the license](LICENSE).
