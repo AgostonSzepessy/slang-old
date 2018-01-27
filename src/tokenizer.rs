@@ -16,7 +16,9 @@ impl<'a> TokenIterator<'a> {
     }
 
     pub fn next_token(&mut self) -> Option<Token> {
-        // Used for parsing operators that have an equal sign as a part of them
+        // Used for parsing operators that have an equal sign as a part of them.
+        // `token` is the single character token, and `eq_token` is the character
+        // with an equal sign appended to it.
         // Examples: +=, -=, !=, etc
         macro_rules! parse_op_equal_case {
             ($token: expr, $eq_token: expr) => {{
@@ -30,6 +32,8 @@ impl<'a> TokenIterator<'a> {
             }}
         }
 
+        // Keeps track of the row that is being parsed, so when an error happens
+        // the user knows which line to check
         let mut row = 1;
 
         while let Some(c) = self.chars.next() {
@@ -215,13 +219,83 @@ impl<'a> TokenIterator<'a> {
                 '-' => parse_op_equal_case!(Token::Minus, Token::MinusEq),
                 '/' => parse_op_equal_case!(Token::Slash, Token::SlashEq),
                 '*' => parse_op_equal_case!(Token::Star, Token::StarEq),
+                
+                // Encountered a comment
+                // `#` means a line comment
+                // `#- -#` is a multiline comment. These can be nested
+                '#' => {
+                    match self.chars.peek() {
+                        Some(&'-') => {
+                            self.chars.next();
+                            // Keep track of the comment nesting level
+                            let mut num_levels = 1;
 
-                '\n' => {
-                    row += 1;
+                            let mut last_comment_symbol = ' ';
+                            while let Some(&nxt) = self.chars.peek() {
+                                match nxt {
+                                    '#' => {
+                                        // Last two characters form `-#`, which means
+                                        // the comment level must be decremented
+                                        if last_comment_symbol == '-' {
+                                            last_comment_symbol = ' ';
+                                            num_levels -= 1;
+                                        }
+                                        else {
+                                            last_comment_symbol = '#';
+                                        }
+                                    },
+
+                                    '-' => {
+                                        // Last two characters form `#-`, which means
+                                        // comment level must be incremented
+                                        if last_comment_symbol == '#' {
+                                            last_comment_symbol = ' ';
+                                            num_levels += 1;
+                                        }
+                                        else {
+                                            last_comment_symbol = '-';
+                                        }
+                                    },
+
+                                    _ => last_comment_symbol = ' ',
+                                }
+
+                                self.chars.next();
+
+                                if num_levels == 0 {
+                                    break;
+                                }
+                            }
+                        },
+
+                        // Encountered a single line comment. Consume the entire
+                        // line.
+                        _ => {
+                            while let Some(&next) = self.chars.peek() {
+                                match next {
+                                    '\n' => {
+                                        row += 1;
+                                        self.chars.next();
+                                        break;
+                                    },
+
+                                    _ => {
+                                        self.chars.next();
+                                    },
+                                }
+                            }
+                        },
+                    }
+                },
+
+                x if x.is_whitespace() => {
+                    if x == '\n' {
+                        row += 1;
+                    }
                 },
 
                 _ => {
-
+                    return Some(Token::Error(TokenError::UnexpectedCharacter(c.to_string(), row)));
                 }
             }
 
@@ -304,4 +378,15 @@ mod tests {
     gen_test!(test_true, "true", Some(Token::True));
     gen_test!(test_while, "while", Some(Token::While));
     gen_test!(test_identifier, "foo", Some(Token::Identifier("foo".to_string())));
+
+    // Test comments
+    gen_test!(test_comment_and, r##"# This is a comment
+                                    and"##, Some(Token::And));
+    gen_test!(test_multiline_comment_and, r##"#- This is
+                                                 a multiline comment
+                                                -# and"##, Some(Token::And));
+    gen_test!(test_multiline_nested_comment_and, r##"#- This is
+                                                        #- a nested -#
+                                                        multiline comment
+                                                        -# and"##, Some(Token::And));
 }
