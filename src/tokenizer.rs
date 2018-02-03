@@ -9,12 +9,15 @@ pub struct TokenIterator<'a> {
 }
 
 impl<'a> TokenIterator<'a> {
+    /// Creates a new TokenIterator.
+    /// `chars`: the stream of input characters to tokenize
     fn new(chars: Peekable<Chars<'a>>) -> Self {
         TokenIterator {
             chars: chars,
         }
     }
 
+    /// Returns the next token in the input stream.
     pub fn next_token(&mut self) -> Option<Token> {
         // Used for parsing operators that have an equal sign as a part of them.
         // `token` is the single character token, and `eq_token` is the character
@@ -87,6 +90,7 @@ impl<'a> TokenIterator<'a> {
                     digits.push(c);
 
                     let mut radix = None;
+                    let mut illegal_num = false;
 
                     // Check if next digit is a number
                     while let Some(&n) = self.chars.peek() {
@@ -108,6 +112,12 @@ impl<'a> TokenIterator<'a> {
                                             self.chars.next();
                                         }
 
+                                        'a'...'z' | 'A'...'Z' => {
+                                            digits.push(decimal);
+                                            self.chars.next();
+                                            illegal_num = true;
+                                        }
+
                                         _ => break,
                                     }
                                 }
@@ -123,6 +133,12 @@ impl<'a> TokenIterator<'a> {
                                         '0'...'9' | 'a'...'f' | 'A'...'F' => {
                                             digits.push(hex);
                                             self.chars.next();
+                                        }
+
+                                        'g'...'z' | 'G'...'Z' => {
+                                            digits.push(hex);
+                                            self.chars.next();
+                                            illegal_num = true;
                                         }
 
                                         _ => break,
@@ -144,6 +160,12 @@ impl<'a> TokenIterator<'a> {
                                             self.chars.next();
                                         }
 
+                                        'a'...'z' | 'A'...'Z' | '8'...'9' => {
+                                            digits.push(oct);
+                                            self.chars.next();
+                                            illegal_num = true;
+                                        }
+
                                         _ => break,
                                     }
                                 }
@@ -163,12 +185,25 @@ impl<'a> TokenIterator<'a> {
                                             self.chars.next();
                                         }
 
+                                        '2'...'9' | 'a'...'z' | 'A'...'Z' => {
+                                            digits.push(bin);
+                                            self.chars.next();
+                                            illegal_num = true;
+                                        }
+
                                         _ => break,
                                     }
                                 }
 
                                 radix = Some(2);
                             }
+
+                            // Came across a number such as 543z, which is not allowed
+                            'a'...'z' | 'A'...'Z' => {
+                                digits.push(n);
+                                self.chars.next();
+                                illegal_num = true;
+                            },
 
                             _ => {
                                 break;
@@ -179,6 +214,12 @@ impl<'a> TokenIterator<'a> {
                     // Convert string into number
                     let result: String = digits.into_iter().collect();
 
+                    // Found an illegal number
+                    if illegal_num {
+                        return Some(Token::Error(TokenError::MalformedNumber(result, row)));
+                    }
+
+                    // Convert number to appropriate base and return result
                     if let Some(base) = radix {
                         if let Ok(num) = i64::from_str_radix(&result[2..], base) {
                             return Some(Token::Int(num));
@@ -187,6 +228,7 @@ impl<'a> TokenIterator<'a> {
                         return Some(Token::Error(TokenError::MalformedNumber(result, row))); 
                     }
 
+                    // Parse as int or float
                     if let Ok(num) = result.parse::<i64>() {
                         return Some(Token::Int(num));
                     }
@@ -194,6 +236,7 @@ impl<'a> TokenIterator<'a> {
                         return Some(Token::Float(num));
                     }
 
+                    // Something went wrong
                     return Some(Token::Error(TokenError::MalformedNumber(result, row)));
                 },
 
@@ -309,6 +352,9 @@ impl<'a> TokenIterator<'a> {
 mod tests {
     use super::*;
 
+    /// Generates a test for testing the Tokenizer. `$name` is the name of the
+    /// test to generate, `$input` is the input string to test, and 
+    /// `$expected_res` is the expected Token that the Tokenizer will return.
     macro_rules! gen_test {
         ($name: ident, $input: expr, $expected_res: expr) => {
             #[test]
@@ -389,4 +435,14 @@ mod tests {
                                                         #- a nested -#
                                                         multiline comment
                                                         -# and"##, Some(Token::And));
+
+    // Test illegal numbers
+    gen_test!(test_illegal_int, "543za", Some(Token::Error(TokenError::MalformedNumber("543za".to_string(), 1))));
+    gen_test!(test_illegal_float, "52.23aEz", Some(Token::Error(TokenError::MalformedNumber("52.23aEz".to_string(), 1))));
+    gen_test!(test_illegal_octal, "0o7ae8", Some(Token::Error(TokenError::MalformedNumber("0o7ae8".to_string(), 1))));
+    gen_test!(test_illegal_octal_prefix, "23o7", Some(Token::Error(TokenError::MalformedNumber("23o7".to_string(), 1))));
+    gen_test!(test_illegal_hex, "0xA1zxE2", Some(Token::Error(TokenError::MalformedNumber("0xA1zxE2".to_string(), 1))));
+    gen_test!(test_illegal_hex_prefix, "23xA1", Some(Token::Error(TokenError::MalformedNumber("23xA1".to_string(), 1))));
+    gen_test!(test_illegal_bin, "0b01Aefx2", Some(Token::Error(TokenError::MalformedNumber("0b01Aefx2".to_string(), 1))));
+    gen_test!(test_illegal_bin_prefix, "23b10", Some(Token::Error(TokenError::MalformedNumber("23b10".to_string(), 1))));
 }
