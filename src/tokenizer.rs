@@ -63,7 +63,6 @@ impl<'a> TokenIterator<'a> {
 
                     match identifier.as_ref() {
                         "and" => return Some(Token::And),
-                        "class" => return Some(Token::Class),
                         "clone" => return Some(Token::Clone),
                         "const" => return Some(Token::Const),
                         "if" => return Some(Token::If),
@@ -73,10 +72,8 @@ impl<'a> TokenIterator<'a> {
                         "fn" => return Some(Token::Fn),
                         "let" => return Some(Token::Let),
                         "none" => return Some(Token::None),
-                        "static" => return Some(Token::Static),
-                        "super" => return Some(Token::Super),
                         "ret" => return Some(Token::Ret),
-                        "this" => return Some(Token::This),
+                        "self" => return Some(Token::Slf),
                         "true" => return Some(Token::True),
                         "while" => return Some(Token::While),
                         _ => return Some(Token::Identifier(identifier)),
@@ -348,6 +345,14 @@ impl<'a> TokenIterator<'a> {
     }
 }
 
+impl<'a> Iterator for TokenIterator<'a> {
+    type Item = Token;
+
+    fn next(&mut self) -> Option<Token> {
+        self.next_token()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -407,7 +412,6 @@ mod tests {
 
     // Test keywords
     gen_test!(test_and, "and", Some(Token::And));
-    gen_test!(test_class, "class", Some(Token::Class));
     gen_test!(test_clone, "clone", Some(Token::Clone));
     gen_test!(test_const, "const", Some(Token::Const));
     gen_test!(test_if, "if", Some(Token::If));
@@ -417,10 +421,8 @@ mod tests {
     gen_test!(test_fn, "fn", Some(Token::Fn));
     gen_test!(test_let, "let", Some(Token::Let));
     gen_test!(test_none, "none", Some(Token::None));
-    gen_test!(test_static, "static", Some(Token::Static));
-    gen_test!(test_super, "super", Some(Token::Super));
     gen_test!(test_ret, "ret", Some(Token::Ret));
-    gen_test!(test_this, "this", Some(Token::This));
+    gen_test!(test_self, "self", Some(Token::Slf));
     gen_test!(test_true, "true", Some(Token::True));
     gen_test!(test_while, "while", Some(Token::While));
     gen_test!(test_identifier, "foo", Some(Token::Identifier("foo".to_string())));
@@ -445,4 +447,6 @@ mod tests {
     gen_test!(test_illegal_hex_prefix, "23xA1", Some(Token::Error(TokenError::MalformedNumber("23xA1".to_string(), 1))));
     gen_test!(test_illegal_bin, "0b01Aefx2", Some(Token::Error(TokenError::MalformedNumber("0b01Aefx2".to_string(), 1))));
     gen_test!(test_illegal_bin_prefix, "23b10", Some(Token::Error(TokenError::MalformedNumber("23b10".to_string(), 1))));
+
+    gen_test!(test_eof, "", None);
 }
