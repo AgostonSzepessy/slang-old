@@ -1,8 +1,6 @@
 use token::Token;
 use tokenizer::TokenIterator;
 
-use failure::Error;
-
 use std::mem;
 use std::fmt;
 use std::iter::Peekable;
@@ -31,7 +29,7 @@ pub enum Expr {
 #[derive(Debug, Fail)]
 pub enum ParseError {
     #[fail(display = "Error: expected {}, found end of file", _0)]
-    UnexpectedEndofFile(Token),
+    UnexpectedEndOfFile(TokenVec),
     #[fail(display = "Error: expected {}, found {}", _0, _1)]
     UnexpectedToken(Token, Token),
     #[fail(display = "Error: expected one of: {}", _0)]
@@ -58,8 +56,7 @@ impl<'a> Parser<'a> {
     fn equality(&mut self) -> Result<Expr, ParseError> {
         let expr = self.comparison()?;
 
-        if self.match_token(&[mem::discriminant(&Token::BangEq), mem::discriminant(&Token::EqEq)]) {
-            let operator = self.tokens.next().unwrap();
+        if let Some(operator) = self.match_token(&[Token::BangEq, Token::EqEq]) {
             let right = self.comparison()?;
             return Ok(Expr::Binary(Box::new(expr), operator, Box::new(right)));
         }
@@ -70,9 +67,7 @@ impl<'a> Parser<'a> {
     fn comparison(&mut self) -> Result<Expr, ParseError> {
         let expr = self.addition()?;
 
-        if self.match_token(&[mem::discriminant(&Token::Greater), mem::discriminant(&Token::GreaterEq), 
-                            mem::discriminant(&Token::Less), mem::discriminant(&Token::LessEq)]) {
-            let operator = self.tokens.next().unwrap();
+        if let Some(operator) = self.match_token(&[Token::Greater, Token::GreaterEq, Token::Less, Token::LessEq]) {
             let right = self.addition()?;
             return Ok(Expr::Binary(Box::new(expr), operator, Box::new(right)));
         }
@@ -83,8 +78,7 @@ impl<'a> Parser<'a> {
     fn addition(&mut self) -> Result<Expr, ParseError> {
         let expr = self.multiplication()?;
 
-        if self.match_token(&[mem::discriminant(&Token::Plus), mem::discriminant(&Token::Minus)]) {
-            let operator = self.tokens.next().unwrap();
+        if let Some(operator) = self.match_token(&[Token::Plus, Token::Minus]) {
             let right = self.multiplication()?;
             return Ok(Expr::Binary(Box::new(expr), operator, Box::new(right)));
         }
@@ -95,8 +89,7 @@ impl<'a> Parser<'a> {
     fn multiplication(&mut self) -> Result<Expr, ParseError> {
         let expr = self.unary()?;
 
-        if self.match_token(&[mem::discriminant(&Token::Star), mem::discriminant(&Token::Slash), mem::discriminant(&Token::Percent)]) {
-            let operator = self.tokens.next().unwrap();
+        if let Some(operator) = self.match_token(&[Token::Star, Token::Slash, Token::Percent]) {
             let right = self.unary()?;
             return Ok(Expr::Binary(Box::new(expr), operator, Box::new(right)));
         }
@@ -105,8 +98,7 @@ impl<'a> Parser<'a> {
     }
 
     fn unary(&mut self) -> Result<Expr, ParseError> {
-        if self.match_token(&[mem::discriminant(&Token::Minus), mem::discriminant(&Token::Bang)]) {
-            let operator = self.tokens.next().unwrap();
+        if let Some(operator) = self.match_token(&[Token::Minus, Token::Bang]) {
             let expr = self.primary()?;
             return Ok(Expr::Unary(operator, Box::new(expr)));
         }
@@ -116,15 +108,12 @@ impl<'a> Parser<'a> {
 
     fn primary(&mut self) -> Result<Expr, ParseError> {
         // Found a primary token
-        if self.match_token(&[mem::discriminant(&Token::Int(0)), mem::discriminant(&Token::Float(0f64)),
-            mem::discriminant(&Token::False), mem::discriminant(&Token::True), mem::discriminant(&Token::None)]) {
-            let token = self.tokens.next().unwrap();
+        if let Some(token) = self.match_token(&[Token::Int(0), Token::Float(0f64), Token::False, Token::True, Token::None]) {
             return Ok(Expr::Primary(token));
         }
 
         // Found the start of a grouping
-        if self.match_token(&[mem::discriminant(&Token::LeftParen)]) {
-            self.consume(Token::LeftParen)?;
+        if let Some(_) = self.match_token(&[Token::LeftParen]) {
             let expr = self.expression()?;
             self.consume(Token::RightParen)?;
             return Ok(Expr::Grouping(Box::new(expr)));
@@ -135,26 +124,28 @@ impl<'a> Parser<'a> {
 
     /// Checks if the current token matches one of the specified tokens
     /// Parameters: `tokens`: slice of tokens to check
-    fn match_token(&mut self, tokens: &[mem::Discriminant<Token>]) -> bool {
+    fn match_token(&mut self, tokens: &[Token]) -> Option<Token> {
         for token in tokens.iter() {
             // Make sure we haven't reached the end of the tokens
-            if let Some(ref t) = self.tokens.peek() {
-                if token == &mem::discriminant(*t) {
-                    return true;
+            if let Some(t) = self.tokens.next() {
+                if mem::discriminant(&token) == mem::discriminant(&&t) {
+                    return Some(t);
                 }
             } else {
-                return false;
+                // Reached end of file; no more tokens available
+                return None;
             }
         }
 
-        return false;
+        // Didn't find any tokens
+        None
     }
 
     /// Checks whether the current token is equal to the specified token. If it is, the iterator
     /// advances to the next token. Otherwise, it returns an error.
     /// Parameters: `token`: `Token` to check for.
     fn consume(&mut self, token: Token) -> Result<(), ParseError> {
-        if self.match_token(&[mem::discriminant(&token)]) {
+        if let Some(_) = self.match_token(&[(token.clone())]) {
             self.tokens.next();
             return Ok(());
         }

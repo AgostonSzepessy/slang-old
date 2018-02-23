@@ -1,5 +1,4 @@
 use std::fmt;
-use std::fmt::Write;
 
 #[derive(Clone, Debug, Fail, PartialEq)]
 pub enum TokenError {
