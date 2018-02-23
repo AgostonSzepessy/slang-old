@@ -10,7 +10,9 @@ pub struct TokenVec(pub Vec<Token>);
 
 impl fmt::Display for TokenVec {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "vector")
+        // Convert tokens into a comma separated list
+        let output = self.0[..].iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", ");
+        write!(f, "{}", output)
     }
 }
 
