@@ -1,4 +1,6 @@
 # Slang
+[![Build Status](https://jenkins.agoston.codes/buildStatus/icon?job=slang)](https://jenkins.agoston.codes/job/slang/)
+
 Slang is a simple scripting language.
 
 ## Building
