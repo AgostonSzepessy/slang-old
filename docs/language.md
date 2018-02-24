@@ -56,8 +56,6 @@ Objects are assigned to variables, and to create a new instance, use the `clone(
 let obj = {
     # Instance variable
     let a = 0;
-    # Static variable shared between instances
-    static variable = "foo";
     # Constant variable
     const CONSTANT = 5.0;
 
@@ -69,14 +67,10 @@ let obj = {
 
     fn new() {
         let o = clone(self);
-        return o;
+        ret o;
     }
 
     fn foo(self) {
-
-    }
-
-    static fn func() {
 
     }
 }
