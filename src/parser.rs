@@ -5,7 +5,7 @@ use std::mem;
 use std::fmt;
 use std::iter::Peekable;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct TokenVec(pub Vec<Token>);
 
 impl fmt::Display for TokenVec {
@@ -28,7 +28,7 @@ pub enum Expr {
     Grouping(Box<Expr>),
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug, PartialEq, Fail)]
 pub enum ParseError {
     #[fail(display = "Error: expected {}, found end of file", _0)]
     UnexpectedEndOfFile(TokenVec),
@@ -121,22 +121,29 @@ impl<'a> Parser<'a> {
             return Ok(Expr::Grouping(Box::new(expr)));
         }
 
+        // TODO: Rename this to UnexpectedExpression
         Err(ParseError::NoExpression)
     }
 
     /// Checks if the current token matches one of the specified tokens
     /// Parameters: `tokens`: slice of tokens to check
     fn match_token(&mut self, tokens: &[Token]) -> Option<Token> {
+        let mut found_token = false;
         for token in tokens.iter() {
             // Make sure we haven't reached the end of the tokens
-            if let Some(t) = self.tokens.next() {
-                if mem::discriminant(&token) == mem::discriminant(&&t) {
-                    return Some(t);
+            if let Some(t) = self.tokens.peek() {
+                if mem::discriminant(token) == mem::discriminant(t) {
+                    found_token = true;
+                    break;
                 }
             } else {
                 // Reached end of file; no more tokens available
                 return None;
             }
+        }
+
+        if found_token {
+            return self.tokens.next();
         }
 
         // Didn't find any tokens
@@ -154,4 +161,79 @@ impl<'a> Parser<'a> {
 
         Err(ParseError::UnexpectedToken(token, self.tokens.peek().unwrap().clone()))
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use token::Token;
+    use tokenizer::TokenIterator;
+
+    macro_rules! binary_test {
+        ($name: ident, $token: expr) => {
+            #[test]
+            fn $name() {
+                let token_vec = vec![Token::Int(1), $token, Token::Int(1)];
+                let tokens = TokenIterator::from(&token_vec).peekable();
+                let mut parser = Parser::new(tokens);
+                assert_eq!(parser.expression(), Ok(Expr::Binary(Box::new(Expr::Primary(Token::Int(1))), $token, Box::new(Expr::Primary(Token::Int(1))))));
+            }
+        }
+    }
+
+    macro_rules! primary_test {
+        ($name: ident, $token: expr) => {
+            #[test]
+            fn $name() {
+                let token_vec = vec![$token];
+                let tokens = TokenIterator::from(&token_vec).peekable();
+                let mut parser = Parser::new(tokens);
+                assert_eq!(parser.expression(), Ok(Expr::Primary($token)));
+            }
+        }
+    }
+
+    // Test binary expressions such as 5 + 3
+    binary_test!(test_bang_eq, Token::BangEq);
+    binary_test!(test_eqeq, Token::EqEq);
+    binary_test!(test_greater, Token::Greater);
+    binary_test!(test_greater_eq, Token::GreaterEq);
+    binary_test!(test_less, Token::Less);
+    binary_test!(test_less_eq, Token::LessEq);
+    binary_test!(test_binary_addition, Token::Plus);
+    binary_test!(test_binary_minus, Token::Minus);
+    binary_test!(test_multiplication, Token::Star);
+    binary_test!(test_division, Token::Slash);
+    binary_test!(test_modulus, Token::Percent);
+
+    // Test primary expressions such as 5 and false
+    primary_test!(test_number, Token::Int(5));
+    primary_test!(test_false, Token::False);
+    primary_test!(test_true, Token::True);
+    primary_test!(test_none, Token::None);
+
+    #[test]
+    fn test_unary_minus() {
+        let token_vec = vec![Token::Minus, Token::Int(1)];
+        let tokens = TokenIterator::from(&token_vec).peekable();
+        let mut parser = Parser::new(tokens);
+        assert_eq!(parser.expression(), Ok(Expr::Unary(Token::Minus, Box::new(Expr::Primary(Token::Int(1))))));
+    }
+
+    #[test]
+    fn test_unary_bang() {
+        let token_vec = vec![Token::Bang, Token::Int(1)];
+        let tokens = TokenIterator::from(&token_vec).peekable();
+        let mut parser = Parser::new(tokens);
+        assert_eq!(parser.expression(), Ok(Expr::Unary(Token::Bang, Box::new(Expr::Primary(Token::Int(1))))));
+    }
+
+    #[test]
+    fn test_fail_unary_plus() {
+        let token_vec = vec![Token::Plus, Token::Int(1)];
+        let tokens = TokenIterator::from(&token_vec).peekable();
+        let mut parser = Parser::new(tokens);
+        assert_eq!(parser.expression(), Err(ParseError::NoExpression));
+    }
+
 }

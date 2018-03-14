@@ -1,344 +1,352 @@
-use std::iter::Peekable;
-use std::iter::Iterator;
-use std::str::Chars;
-
 use token::{Token, TokenError};
 
+use std::iter::Peekable;
+use std::iter::Iterator;
+use std::slice::Iter;
+use std::str::Chars;
+
+use either::Either;
+
 pub struct TokenIterator<'a> {
-    chars: Peekable<Chars<'a>>,
+    stream: Either<Peekable<Chars<'a>>, Iter<'a, Token>>,
 }
 
 impl<'a> TokenIterator<'a> {
     /// Creates a new TokenIterator.
     /// `chars`: the stream of input characters to tokenize
-    fn new(chars: Peekable<Chars<'a>>) -> Self {
+    pub fn new(chars: Peekable<Chars<'a>>) -> Self {
         TokenIterator {
-            chars: chars,
+            stream: Either::Left(chars),
         }
     }
 
     /// Returns the next token in the input stream.
     pub fn next_token(&mut self) -> Option<Token> {
-        // Used for parsing operators that have an equal sign as a part of them.
-        // `token` is the single character token, and `eq_token` is the character
-        // with an equal sign appended to it.
-        // Examples: +=, -=, !=, etc
-        macro_rules! parse_op_equal_case {
-            ($token: expr, $eq_token: expr) => {{
-                match self.chars.peek() {
-                    Some(&'=') => { 
-                        self.chars.next();
-                        return Some($eq_token);
-                    }
-                    _ => return Some($token),
-                }
-            }}
-        }
-
-        // Keeps track of the row that is being parsed, so when an error happens
-        // the user knows which line to check
-        let mut row = 1;
-
-        while let Some(c) = self.chars.next() {
-            match c {
-                // Parse an identifier
-                'a'...'z' | 'A'...'Z' | '_' => {
-                    let mut chars = Vec::new();
-                    chars.push(c);
-
-                    // Keep scanning until we come across something that isn't
-                    // alpha-numeric or an underscore.
-                    while let Some(&ch) = self.chars.peek() {
-                        match ch {
-                            '0'...'9' | 'a'...'z' | 'A'...'Z' | '_' => {
-                                chars.push(ch);
-                                self.chars.next();
-                            }
-
-                            _ => break,
+        if let Either::Left(ref mut stream) = self.stream {
+            // Used for parsing operators that have an equal sign as a part of them.
+            // `token` is the single character token, and `eq_token` is the character
+            // with an equal sign appended to it.
+            // Examples: +=, -=, !=, etc
+            macro_rules! parse_op_equal_case {
+                ($token: expr, $eq_token: expr) => {{
+                    match stream.peek() {
+                        Some(&'=') => { 
+                            stream.next();
+                            return Some($eq_token);
                         }
+                        _ => return Some($token),
                     }
-
-                    let identifier: String = chars.into_iter().collect();
-
-                    match identifier.as_ref() {
-                        "and" => return Some(Token::And),
-                        "clone" => return Some(Token::Clone),
-                        "const" => return Some(Token::Const),
-                        "if" => return Some(Token::If),
-                        "else" => return Some(Token::Else),
-                        "false" => return Some(Token::False),
-                        "for" => return Some(Token::For),
-                        "fn" => return Some(Token::Fn),
-                        "let" => return Some(Token::Let),
-                        "none" => return Some(Token::None),
-                        "ret" => return Some(Token::Ret),
-                        "self" => return Some(Token::Slf),
-                        "true" => return Some(Token::True),
-                        "while" => return Some(Token::While),
-                        _ => return Some(Token::Identifier(identifier)),
-                    }
-                }
-
-                // Found something that starts with a number
-                '0'...'9' => {
-                    // Create vector to store individual digits
-                    let mut digits = Vec::new();
-                    digits.push(c);
-
-                    let mut radix = None;
-                    let mut illegal_num = false;
-
-                    // Check if next digit is a number
-                    while let Some(&n) = self.chars.peek() {
-                        match n {
-                            '0'...'9' => {
-                                digits.push(n);
-                                self.chars.next();
-                            },
-
-                            // Try to parse a floating point number
-                            '.' => {
-                                digits.push(n);
-                                self.chars.next();
-
-                                while let Some(&decimal) = self.chars.peek() {
-                                    match decimal {
-                                        '0'...'9' => {
-                                            digits.push(decimal);
-                                            self.chars.next();
-                                        }
-
-                                        'a'...'z' | 'A'...'Z' => {
-                                            digits.push(decimal);
-                                            self.chars.next();
-                                            illegal_num = true;
-                                        }
-
-                                        _ => break,
-                                    }
-                                }
-                            }
-
-                            // Parse hexadecimals
-                            'x' => {
-                                digits.push(n);
-                                self.chars.next();
-
-                                while let Some(&hex) = self.chars.peek() {
-                                    match hex {
-                                        '0'...'9' | 'a'...'f' | 'A'...'F' => {
-                                            digits.push(hex);
-                                            self.chars.next();
-                                        }
-
-                                        'g'...'z' | 'G'...'Z' => {
-                                            digits.push(hex);
-                                            self.chars.next();
-                                            illegal_num = true;
-                                        }
-
-                                        _ => break,
-                                    }
-                                }
-
-                                radix = Some(16);
-                            }
-
-                            // Parse octal numbers
-                            'o' => {
-                                digits.push(n);
-                                self.chars.next();
-
-                                while let Some(&oct) = self.chars.peek() {
-                                    match oct { 
-                                        '0'...'7' => {
-                                            digits.push(oct);
-                                            self.chars.next();
-                                        }
-
-                                        'a'...'z' | 'A'...'Z' | '8'...'9' => {
-                                            digits.push(oct);
-                                            self.chars.next();
-                                            illegal_num = true;
-                                        }
-
-                                        _ => break,
-                                    }
-                                }
-
-                                radix = Some(8);
-                            }
-
-                            // Parse binary numbers
-                            'b' => {
-                                digits.push(n);
-                                self.chars.next();
-
-                                while let Some(&bin) = self.chars.peek() {
-                                    match bin {
-                                        '0'...'1' => {
-                                            digits.push(bin);
-                                            self.chars.next();
-                                        }
-
-                                        '2'...'9' | 'a'...'z' | 'A'...'Z' => {
-                                            digits.push(bin);
-                                            self.chars.next();
-                                            illegal_num = true;
-                                        }
-
-                                        _ => break,
-                                    }
-                                }
-
-                                radix = Some(2);
-                            }
-
-                            // Came across a number such as 543z, which is not allowed
-                            'a'...'z' | 'A'...'Z' => {
-                                digits.push(n);
-                                self.chars.next();
-                                illegal_num = true;
-                            },
-
-                            _ => {
-                                break;
-                            },
-                        }
-                    }
-
-                    // Convert string into number
-                    let result: String = digits.into_iter().collect();
-
-                    // Found an illegal number
-                    if illegal_num {
-                        return Some(Token::Error(TokenError::MalformedNumber(result, row)));
-                    }
-
-                    // Convert number to appropriate base and return result
-                    if let Some(base) = radix {
-                        if let Ok(num) = i64::from_str_radix(&result[2..], base) {
-                            return Some(Token::Int(num));
-                        }
-
-                        return Some(Token::Error(TokenError::MalformedNumber(result, row))); 
-                    }
-
-                    // Parse as int or float
-                    if let Ok(num) = result.parse::<i64>() {
-                        return Some(Token::Int(num));
-                    }
-                    else if let Ok(num) = result.parse::<f64>() {
-                        return Some(Token::Float(num));
-                    }
-
-                    // Something went wrong
-                    return Some(Token::Error(TokenError::MalformedNumber(result, row)));
-                },
-
-                // Parse single character tokens
-                ',' => return Some(Token::Comma),
-                '.' => return Some(Token::Dot),
-                ':' => return Some(Token::Colon),
-                '(' => return Some(Token::LeftParen),
-                ')' => return Some(Token::RightParen),
-                '[' => return Some(Token::LeftBracket),
-                ']' => return Some(Token::RightBracket),
-                '{' => return Some(Token::LeftBrace),
-                '}' => return Some(Token::RightBrace),
-                ';' => return Some(Token::Semicolon),
-
-                // Parse single or double character tokens
-                '!' => parse_op_equal_case!(Token::Bang, Token::BangEq),
-                '=' => parse_op_equal_case!(Token::Eq, Token::EqEq),
-                '>' => parse_op_equal_case!(Token::Greater, Token::GreaterEq),
-                '<' => parse_op_equal_case!(Token::Less, Token::LessEq),
-                '%' => parse_op_equal_case!(Token::Percent, Token::PercentEq),
-                '+' => parse_op_equal_case!(Token::Plus, Token::PlusEq),
-                '-' => parse_op_equal_case!(Token::Minus, Token::MinusEq),
-                '/' => parse_op_equal_case!(Token::Slash, Token::SlashEq),
-                '*' => parse_op_equal_case!(Token::Star, Token::StarEq),
-                
-                // Encountered a comment
-                // `#` means a line comment
-                // `#- -#` is a multiline comment. These can be nested
-                '#' => {
-                    match self.chars.peek() {
-                        Some(&'-') => {
-                            self.chars.next();
-                            // Keep track of the comment nesting level
-                            let mut num_levels = 1;
-
-                            let mut last_comment_symbol = ' ';
-                            while let Some(&nxt) = self.chars.peek() {
-                                match nxt {
-                                    '#' => {
-                                        // Last two characters form `-#`, which means
-                                        // the comment level must be decremented
-                                        if last_comment_symbol == '-' {
-                                            last_comment_symbol = ' ';
-                                            num_levels -= 1;
-                                        }
-                                        else {
-                                            last_comment_symbol = '#';
-                                        }
-                                    },
-
-                                    '-' => {
-                                        // Last two characters form `#-`, which means
-                                        // comment level must be incremented
-                                        if last_comment_symbol == '#' {
-                                            last_comment_symbol = ' ';
-                                            num_levels += 1;
-                                        }
-                                        else {
-                                            last_comment_symbol = '-';
-                                        }
-                                    },
-
-                                    _ => last_comment_symbol = ' ',
-                                }
-
-                                self.chars.next();
-
-                                if num_levels == 0 {
-                                    break;
-                                }
-                            }
-                        },
-
-                        // Encountered a single line comment. Consume the entire
-                        // line.
-                        _ => {
-                            while let Some(&next) = self.chars.peek() {
-                                match next {
-                                    '\n' => {
-                                        row += 1;
-                                        self.chars.next();
-                                        break;
-                                    },
-
-                                    _ => {
-                                        self.chars.next();
-                                    },
-                                }
-                            }
-                        },
-                    }
-                },
-
-                x if x.is_whitespace() => {
-                    if x == '\n' {
-                        row += 1;
-                    }
-                },
-
-                _ => {
-                    return Some(Token::Error(TokenError::UnexpectedCharacter(c.to_string(), row)));
-                }
+                }}
             }
 
+
+            // Keeps track of the row that is being parsed, so when an error happens
+            // the user knows which line to check
+            let mut row = 1;
+
+            while let Some(c) = stream.next() {
+                match c {
+                    // Parse an identifier
+                    'a'...'z' | 'A'...'Z' | '_' => {
+                        let mut chars = Vec::new();
+                        chars.push(c);
+
+                        // Keep scanning until we come across something that isn't
+                        // alpha-numeric or an underscore.
+                        while let Some(&ch) = stream.peek() {
+                            match ch {
+                                '0'...'9' | 'a'...'z' | 'A'...'Z' | '_' => {
+                                    chars.push(ch);
+                                    stream.next();
+                                }
+
+                                _ => break,
+                            }
+                        }
+
+                        let identifier: String = chars.into_iter().collect();
+
+                        match identifier.as_ref() {
+                            "and" => return Some(Token::And),
+                            "clone" => return Some(Token::Clone),
+                            "const" => return Some(Token::Const),
+                            "if" => return Some(Token::If),
+                            "else" => return Some(Token::Else),
+                            "false" => return Some(Token::False),
+                            "for" => return Some(Token::For),
+                            "fn" => return Some(Token::Fn),
+                            "let" => return Some(Token::Let),
+                            "none" => return Some(Token::None),
+                            "ret" => return Some(Token::Ret),
+                            "self" => return Some(Token::Slf),
+                            "true" => return Some(Token::True),
+                            "while" => return Some(Token::While),
+                            _ => return Some(Token::Identifier(identifier)),
+                        }
+                    }
+
+                    // Found something that starts with a number
+                    '0'...'9' => {
+                        // Create vector to store individual digits
+                        let mut digits = Vec::new();
+                        digits.push(c);
+
+                        let mut radix = None;
+                        let mut illegal_num = false;
+
+                        // Check if next digit is a number
+                        while let Some(&n) = stream.peek() {
+                            match n {
+                                '0'...'9' => {
+                                    digits.push(n);
+                                    stream.next();
+                                },
+
+                                // Try to parse a floating point number
+                                '.' => {
+                                    digits.push(n);
+                                    stream.next();
+
+                                    while let Some(&decimal) = stream.peek() {
+                                        match decimal {
+                                            '0'...'9' => {
+                                                digits.push(decimal);
+                                                stream.next();
+                                            }
+
+                                            'a'...'z' | 'A'...'Z' => {
+                                                digits.push(decimal);
+                                                stream.next();
+                                                illegal_num = true;
+                                            }
+
+                                            _ => break,
+                                        }
+                                    }
+                                }
+
+                                // Parse hexadecimals
+                                'x' => {
+                                    digits.push(n);
+                                    stream.next();
+
+                                    while let Some(&hex) = stream.peek() {
+                                        match hex {
+                                            '0'...'9' | 'a'...'f' | 'A'...'F' => {
+                                                digits.push(hex);
+                                                stream.next();
+                                            }
+
+                                            'g'...'z' | 'G'...'Z' => {
+                                                digits.push(hex);
+                                                stream.next();
+                                                illegal_num = true;
+                                            }
+
+                                            _ => break,
+                                        }
+                                    }
+
+                                    radix = Some(16);
+                                }
+
+                                // Parse octal numbers
+                                'o' => {
+                                    digits.push(n);
+                                    stream.next();
+
+                                    while let Some(&oct) = stream.peek() {
+                                        match oct { 
+                                            '0'...'7' => {
+                                                digits.push(oct);
+                                                stream.next();
+                                            }
+
+                                            'a'...'z' | 'A'...'Z' | '8'...'9' => {
+                                                digits.push(oct);
+                                                stream.next();
+                                                illegal_num = true;
+                                            }
+
+                                            _ => break,
+                                        }
+                                    }
+
+                                    radix = Some(8);
+                                }
+
+                                // Parse binary numbers
+                                'b' => {
+                                    digits.push(n);
+                                    stream.next();
+
+                                    while let Some(&bin) = stream.peek() {
+                                        match bin {
+                                            '0'...'1' => {
+                                                digits.push(bin);
+                                                stream.next();
+                                            }
+
+                                            '2'...'9' | 'a'...'z' | 'A'...'Z' => {
+                                                digits.push(bin);
+                                                stream.next();
+                                                illegal_num = true;
+                                            }
+
+                                            _ => break,
+                                        }
+                                    }
+
+                                    radix = Some(2);
+                                }
+
+                                // Came across a number such as 543z, which is not allowed
+                                'a'...'z' | 'A'...'Z' => {
+                                    digits.push(n);
+                                    stream.next();
+                                    illegal_num = true;
+                                },
+
+                                _ => {
+                                    break;
+                                },
+                            }
+                        }
+
+                        // Convert string into number
+                        let result: String = digits.into_iter().collect();
+
+                        // Found an illegal number
+                        if illegal_num {
+                            return Some(Token::Error(TokenError::MalformedNumber(result, row)));
+                        }
+
+                        // Convert number to appropriate base and return result
+                        if let Some(base) = radix {
+                            if let Ok(num) = i64::from_str_radix(&result[2..], base) {
+                                return Some(Token::Int(num));
+                            }
+
+                            return Some(Token::Error(TokenError::MalformedNumber(result, row))); 
+                        }
+
+                        // Parse as int or float
+                        if let Ok(num) = result.parse::<i64>() {
+                            return Some(Token::Int(num));
+                        }
+                        else if let Ok(num) = result.parse::<f64>() {
+                            return Some(Token::Float(num));
+                        }
+
+                        // Something went wrong
+                        return Some(Token::Error(TokenError::MalformedNumber(result, row)));
+                    },
+
+                    // Parse single character tokens
+                    ',' => return Some(Token::Comma),
+                    '.' => return Some(Token::Dot),
+                    ':' => return Some(Token::Colon),
+                    '(' => return Some(Token::LeftParen),
+                    ')' => return Some(Token::RightParen),
+                    '[' => return Some(Token::LeftBracket),
+                    ']' => return Some(Token::RightBracket),
+                    '{' => return Some(Token::LeftBrace),
+                    '}' => return Some(Token::RightBrace),
+                    ';' => return Some(Token::Semicolon),
+
+                    // Parse single or double character tokens
+                    '!' => parse_op_equal_case!(Token::Bang, Token::BangEq),
+                    '=' => parse_op_equal_case!(Token::Eq, Token::EqEq),
+                    '>' => parse_op_equal_case!(Token::Greater, Token::GreaterEq),
+                    '<' => parse_op_equal_case!(Token::Less, Token::LessEq),
+                    '%' => parse_op_equal_case!(Token::Percent, Token::PercentEq),
+                    '+' => parse_op_equal_case!(Token::Plus, Token::PlusEq),
+                    '-' => parse_op_equal_case!(Token::Minus, Token::MinusEq),
+                    '/' => parse_op_equal_case!(Token::Slash, Token::SlashEq),
+                    '*' => parse_op_equal_case!(Token::Star, Token::StarEq),
+                    
+                    // Encountered a comment
+                    // `#` means a line comment
+                    // `#- -#` is a multiline comment. These can be nested
+                    '#' => {
+                        match stream.peek() {
+                            Some(&'-') => {
+                                stream.next();
+                                // Keep track of the comment nesting level
+                                let mut num_levels = 1;
+
+                                let mut last_comment_symbol = ' ';
+                                while let Some(&nxt) = stream.peek() {
+                                    match nxt {
+                                        '#' => {
+                                            // Last two characters form `-#`, which means
+                                            // the comment level must be decremented
+                                            if last_comment_symbol == '-' {
+                                                last_comment_symbol = ' ';
+                                                num_levels -= 1;
+                                            }
+                                            else {
+                                                last_comment_symbol = '#';
+                                            }
+                                        },
+
+                                        '-' => {
+                                            // Last two characters form `#-`, which means
+                                            // comment level must be incremented
+                                            if last_comment_symbol == '#' {
+                                                last_comment_symbol = ' ';
+                                                num_levels += 1;
+                                            }
+                                            else {
+                                                last_comment_symbol = '-';
+                                            }
+                                        },
+
+                                        _ => last_comment_symbol = ' ',
+                                    }
+
+                                    stream.next();
+
+                                    if num_levels == 0 {
+                                        break;
+                                    }
+                                }
+                            },
+
+                            // Encountered a single line comment. Consume the entire
+                            // line.
+                            _ => {
+                                while let Some(&next) = stream.peek() {
+                                    match next {
+                                        '\n' => {
+                                            row += 1;
+                                            stream.next();
+                                            break;
+                                        },
+
+                                        _ => {
+                                            stream.next();
+                                        },
+                                    }
+                                }
+                            },
+                        }
+                    },
+
+                    x if x.is_whitespace() => {
+                        if x == '\n' {
+                            row += 1;
+                        }
+                    },
+
+                    _ => {
+                        return Some(Token::Error(TokenError::UnexpectedCharacter(c.to_string(), row)));
+                    }
+                }
+
+            }
+        } else if let Either::Right(ref mut tokens) = self.stream {
+            return tokens.next().cloned();
         }
 
         None
@@ -350,6 +358,14 @@ impl<'a> Iterator for TokenIterator<'a> {
 
     fn next(&mut self) -> Option<Token> {
         self.next_token()
+    }
+}
+
+impl<'a> From<&'a Vec<Token>> for TokenIterator<'a> {
+    fn from(v: &'a Vec<Token>) -> Self {
+        TokenIterator {
+            stream: Either::Right(v.iter()),
+        }
     }
 }
 
@@ -449,4 +465,13 @@ mod tests {
     gen_test!(test_illegal_bin_prefix, "23b10", Some(Token::Error(TokenError::MalformedNumber("23b10".to_string(), 1))));
 
     gen_test!(test_eof, "", None);
+
+    #[test]
+    fn test_token_vec() {
+        let tokens = vec![Token::While, Token::Int(0)];
+        let mut it = TokenIterator::from(&tokens);
+        assert_eq!(it.next(), Some(Token::While));
+        assert_eq!(it.next(), Some(Token::Int(0)));
+        assert_eq!(it.next(), None);
+    }
 }
