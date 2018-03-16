@@ -5,6 +5,7 @@ use std::mem;
 use std::fmt;
 use std::iter::Peekable;
 
+/// A vector meant to store tokens and display them.
 #[derive(Debug, PartialEq)]
 pub struct TokenVec(pub Vec<Token>);
 
@@ -16,6 +17,15 @@ impl fmt::Display for TokenVec {
     }
 }
 
+/// `Expr` represents the possible expressions that can be created. There are
+/// 4 different kinds:
+/// * `Binary`: These are expressions that have 2 operands, such as `5 + 3`.
+/// * `Unary`: These are expressions that have an operator prefixed to them,
+/// such as `-3` or `!condition`.
+/// * `Primary`: This is a primitive value, such as a number, string, boolean,
+/// or `none`.
+/// * `Grouping`: This represents an expression that is within parentheses,
+/// such as `(5 + 3)`.
 #[derive(Debug, PartialEq)]
 pub enum Expr {
     /// Expressions that have 2 operands
@@ -40,6 +50,7 @@ pub enum ParseError {
     NoExpression,
 }
 
+/// Creates an abstract syntax tree from the `Token`s supplied to it.
 pub struct Parser<'a> {
     tokens: Peekable<TokenIterator<'a>>,
 }
@@ -159,6 +170,7 @@ impl<'a> Parser<'a> {
             return Ok(());
         }
 
+        // FIXME: Don't use unwrap() here
         Err(ParseError::UnexpectedToken(token, self.tokens.peek().unwrap().clone()))
     }
 }
