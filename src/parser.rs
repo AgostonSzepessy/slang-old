@@ -40,12 +40,12 @@ pub enum Expr {
 
 #[derive(Debug, PartialEq, Fail)]
 pub enum ParseError {
-    #[fail(display = "Error: expected {}, found end of file", _0)]
-    UnexpectedEndOfFile(TokenVec),
+    #[fail(display = "Error: expected {}", _0)]
+    ExpectedToken(Token),
+    #[fail(display = "Error: unexpected expression {}. Expected one of: {}", _0, _1)]
+    UnexpectedExpression(Token, TokenVec),
     #[fail(display = "Error: expected {}, found {}", _0, _1)]
     UnexpectedToken(Token, Token),
-    #[fail(display = "Error: expected one of: {}", _0)]
-    UnmatchedTokens(TokenVec),
     #[fail(display = "Error: expected an expression")]
     NoExpression,
 }
@@ -69,7 +69,7 @@ impl<'a> Parser<'a> {
     fn equality(&mut self) -> Result<Expr, ParseError> {
         let expr = self.comparison()?;
 
-        if let Some(operator) = self.match_token(&[Token::BangEq, Token::EqEq]) {
+        if let Some(operator) = self.match_token(&[Token::BangEq(0, 0), Token::EqEq(0, 0)]) {
             let right = self.comparison()?;
             return Ok(Expr::Binary(Box::new(expr), operator, Box::new(right)));
         }
@@ -80,7 +80,7 @@ impl<'a> Parser<'a> {
     fn comparison(&mut self) -> Result<Expr, ParseError> {
         let expr = self.addition()?;
 
-        if let Some(operator) = self.match_token(&[Token::Greater, Token::GreaterEq, Token::Less, Token::LessEq]) {
+        if let Some(operator) = self.match_token(&[Token::Greater(0, 0), Token::GreaterEq(0, 0), Token::Less(0, 0), Token::LessEq(0, 0)]) {
             let right = self.addition()?;
             return Ok(Expr::Binary(Box::new(expr), operator, Box::new(right)));
         }
@@ -91,7 +91,7 @@ impl<'a> Parser<'a> {
     fn addition(&mut self) -> Result<Expr, ParseError> {
         let expr = self.multiplication()?;
 
-        if let Some(operator) = self.match_token(&[Token::Plus, Token::Minus]) {
+        if let Some(operator) = self.match_token(&[Token::Plus(0, 0), Token::Minus(0, 0)]) {
             let right = self.multiplication()?;
             return Ok(Expr::Binary(Box::new(expr), operator, Box::new(right)));
         }
@@ -102,7 +102,7 @@ impl<'a> Parser<'a> {
     fn multiplication(&mut self) -> Result<Expr, ParseError> {
         let expr = self.unary()?;
 
-        if let Some(operator) = self.match_token(&[Token::Star, Token::Slash, Token::Percent]) {
+        if let Some(operator) = self.match_token(&[Token::Star(0, 0), Token::Slash(0, 0), Token::Percent(0, 0)]) {
             let right = self.unary()?;
             return Ok(Expr::Binary(Box::new(expr), operator, Box::new(right)));
         }
@@ -111,7 +111,7 @@ impl<'a> Parser<'a> {
     }
 
     fn unary(&mut self) -> Result<Expr, ParseError> {
-        if let Some(operator) = self.match_token(&[Token::Minus, Token::Bang]) {
+        if let Some(operator) = self.match_token(&[Token::Minus(0, 0), Token::Bang(0, 0)]) {
             let expr = self.primary()?;
             return Ok(Expr::Unary(operator, Box::new(expr)));
         }
@@ -121,18 +121,17 @@ impl<'a> Parser<'a> {
 
     fn primary(&mut self) -> Result<Expr, ParseError> {
         // Found a primary token
-        if let Some(token) = self.match_token(&[Token::Int(0), Token::Float(0f64), Token::False, Token::True, Token::None]) {
+        if let Some(token) = self.match_token(&[Token::Int(0, 0, 0), Token::Float(0f64, 0, 0), Token::False(0, 0), Token::True(0, 0), Token::None(0, 0)]) {
             return Ok(Expr::Primary(token));
         }
 
         // Found the start of a grouping
-        if let Some(_) = self.match_token(&[Token::LeftParen]) {
+        if let Some(_) = self.match_token(&[Token::LeftParen(0, 0)]) {
             let expr = self.expression()?;
-            self.consume(Token::RightParen)?;
+            self.consume(Token::RightParen(0, 0))?;
             return Ok(Expr::Grouping(Box::new(expr)));
         }
 
-        // TODO: Rename this to UnexpectedExpression
         Err(ParseError::NoExpression)
     }
 
@@ -170,8 +169,13 @@ impl<'a> Parser<'a> {
             return Ok(());
         }
 
-        // FIXME: Don't use unwrap() here
-        Err(ParseError::UnexpectedToken(token, self.tokens.peek().unwrap().clone()))
+        // Found a different token than the one we expected
+        if let Some(t) = self.tokens.peek() {
+            return Err(ParseError::UnexpectedToken(token, t.clone()))
+        } 
+
+        // Couldn't find expected token
+        Err(ParseError::ExpectedToken(token))
     }
 }
 
@@ -185,10 +189,10 @@ mod tests {
         ($name: ident, $token: expr) => {
             #[test]
             fn $name() {
-                let token_vec = vec![Token::Int(1), $token, Token::Int(1)];
+                let token_vec = vec![Token::Int(1, 0, 0), $token, Token::Int(1, 0, 0)];
                 let tokens = TokenIterator::from(&token_vec).peekable();
                 let mut parser = Parser::new(tokens);
-                assert_eq!(parser.expression(), Ok(Expr::Binary(Box::new(Expr::Primary(Token::Int(1))), $token, Box::new(Expr::Primary(Token::Int(1))))));
+                assert_eq!(parser.expression(), Ok(Expr::Binary(Box::new(Expr::Primary(Token::Int(1, 0, 0))), $token, Box::new(Expr::Primary(Token::Int(1, 0, 0))))));
             }
         }
     }
@@ -206,43 +210,43 @@ mod tests {
     }
 
     // Test binary expressions such as 5 + 3
-    binary_test!(test_bang_eq, Token::BangEq);
-    binary_test!(test_eqeq, Token::EqEq);
-    binary_test!(test_greater, Token::Greater);
-    binary_test!(test_greater_eq, Token::GreaterEq);
-    binary_test!(test_less, Token::Less);
-    binary_test!(test_less_eq, Token::LessEq);
-    binary_test!(test_binary_addition, Token::Plus);
-    binary_test!(test_binary_minus, Token::Minus);
-    binary_test!(test_multiplication, Token::Star);
-    binary_test!(test_division, Token::Slash);
-    binary_test!(test_modulus, Token::Percent);
+    binary_test!(test_bang_eq, Token::BangEq(0, 0));
+    binary_test!(test_eqeq, Token::EqEq(0, 0));
+    binary_test!(test_greater, Token::Greater(0, 0));
+    binary_test!(test_greater_eq, Token::GreaterEq(0, 0));
+    binary_test!(test_less, Token::Less(0, 0));
+    binary_test!(test_less_eq, Token::LessEq(0, 0));
+    binary_test!(test_binary_addition, Token::Plus(0, 0));
+    binary_test!(test_binary_minus, Token::Minus(0, 0));
+    binary_test!(test_multiplication, Token::Star(0, 0));
+    binary_test!(test_division, Token::Slash(0, 0));
+    binary_test!(test_modulus, Token::Percent(0, 0));
 
     // Test primary expressions such as 5 and false
-    primary_test!(test_number, Token::Int(5));
-    primary_test!(test_false, Token::False);
-    primary_test!(test_true, Token::True);
-    primary_test!(test_none, Token::None);
+    primary_test!(test_number, Token::Int(5, 0, 0));
+    primary_test!(test_false, Token::False(0, 0));
+    primary_test!(test_true, Token::True(0, 0));
+    primary_test!(test_none, Token::None(0, 0));
 
     #[test]
     fn test_unary_minus() {
-        let token_vec = vec![Token::Minus, Token::Int(1)];
+        let token_vec = vec![Token::Minus(0, 0), Token::Int(1, 0, 0)];
         let tokens = TokenIterator::from(&token_vec).peekable();
         let mut parser = Parser::new(tokens);
-        assert_eq!(parser.expression(), Ok(Expr::Unary(Token::Minus, Box::new(Expr::Primary(Token::Int(1))))));
+        assert_eq!(parser.expression(), Ok(Expr::Unary(Token::Minus(0, 0), Box::new(Expr::Primary(Token::Int(1, 0, 0))))));
     }
 
     #[test]
     fn test_unary_bang() {
-        let token_vec = vec![Token::Bang, Token::Int(1)];
+        let token_vec = vec![Token::Bang(0, 0), Token::Int(1, 0, 0)];
         let tokens = TokenIterator::from(&token_vec).peekable();
         let mut parser = Parser::new(tokens);
-        assert_eq!(parser.expression(), Ok(Expr::Unary(Token::Bang, Box::new(Expr::Primary(Token::Int(1))))));
+        assert_eq!(parser.expression(), Ok(Expr::Unary(Token::Bang(0, 0), Box::new(Expr::Primary(Token::Int(1, 0, 0))))));
     }
 
     #[test]
     fn test_fail_unary_plus() {
-        let token_vec = vec![Token::Plus, Token::Int(1)];
+        let token_vec = vec![Token::Plus(0, 0), Token::Int(1, 0, 0)];
         let tokens = TokenIterator::from(&token_vec).peekable();
         let mut parser = Parser::new(tokens);
         assert_eq!(parser.expression(), Err(ParseError::NoExpression));
