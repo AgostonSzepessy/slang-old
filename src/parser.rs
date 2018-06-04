@@ -5,6 +5,8 @@ use std::mem;
 use std::fmt;
 use std::iter::Peekable;
 
+use prev_iter::PrevPeekable;
+
 /// A vector meant to store tokens and display them.
 #[derive(Debug, PartialEq)]
 pub struct TokenVec(pub Vec<Token>);
@@ -43,23 +45,31 @@ pub enum ParseError {
     #[fail(display = "Error: expected {}", _0)]
     ExpectedToken(Token),
     #[fail(display = "Error: unexpected expression {}. Expected one of: {}", _0, _1)]
-    UnexpectedExpression(Token, TokenVec),
+    UnexpectedExpressionAlts(Token, TokenVec),
+    #[fail(display = "Error: unexpected expression {}", _0)]
+    UnexpectedExpression(Token),
     #[fail(display = "Error: expected {}, found {}", _0, _1)]
     UnexpectedToken(Token, Token),
-    #[fail(display = "Error: expected an expression")]
-    NoExpression,
+    #[fail(display = "Error: expected an expression after {}", _0)]
+    NoExpression(Token),
+    #[fail(display = "Error: expected an expression but end of file was reached")]
+    Eof,
 }
 
 /// Creates an abstract syntax tree from the `Token`s supplied to it.
 pub struct Parser<'a> {
-    tokens: Peekable<TokenIterator<'a>>,
+    tokens: PrevPeekable<TokenIterator<'a>>,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(tokens: Peekable<TokenIterator<'a>>) -> Self {
+    pub fn new(mut tokens: PrevPeekable<TokenIterator<'a>>) -> Self {
         Parser {
             tokens: tokens,
         }
+    }
+
+    pub fn parse(&mut self) -> Result<Expr, ParseError> {
+        self.expression()
     }
 
     fn expression(&mut self) -> Result<Expr, ParseError> {
@@ -132,7 +142,15 @@ impl<'a> Parser<'a> {
             return Ok(Expr::Grouping(Box::new(expr)));
         }
 
-        Err(ParseError::NoExpression)
+        if let Some(prev) = self.tokens.prev() {
+            return Err(ParseError::NoExpression(prev));
+        }
+
+        if let Some(t) = self.tokens.next() {
+            return Err(ParseError::UnexpectedExpression(t));
+        }
+
+        Err(ParseError::Eof)
     }
 
     /// Checks if the current token matches one of the specified tokens
@@ -171,11 +189,38 @@ impl<'a> Parser<'a> {
 
         // Found a different token than the one we expected
         if let Some(t) = self.tokens.peek() {
-            return Err(ParseError::UnexpectedToken(token, t.clone()))
+            return Err(ParseError::UnexpectedToken(token, t.clone()));
         } 
 
         // Couldn't find expected token
         Err(ParseError::ExpectedToken(token))
+    }
+
+    fn synchronize(&mut self) {
+        self.tokens.next();
+
+        while let Some(_) = self.tokens.peek() {
+            if let Some(&Token::Semicolon(..)) = self.tokens.prev_peek() {
+                return;
+            }
+
+            use token::Token::*;
+            match *self.tokens.peek().unwrap() {
+                And(..)
+                | Clone(..)
+                | Const(..)
+                | If(..)
+                | Else(..)
+                | For(..)
+                | Fn(..)
+                | Let(..)
+                | Ret(..)
+                | Slf(..)
+                | While(..) => return,
+
+                _ => { self.tokens.next(); continue },
+            }
+        }
     }
 }
 
@@ -190,7 +235,7 @@ mod tests {
             #[test]
             fn $name() {
                 let token_vec = vec![Token::Int(1, 0, 0), $token, Token::Int(1, 0, 0)];
-                let tokens = TokenIterator::from(&token_vec).peekable();
+                let tokens = PrevPeekable::new(TokenIterator::from(&token_vec));
                 let mut parser = Parser::new(tokens);
                 assert_eq!(parser.expression(), Ok(Expr::Binary(Box::new(Expr::Primary(Token::Int(1, 0, 0))), $token, Box::new(Expr::Primary(Token::Int(1, 0, 0))))));
             }
@@ -202,7 +247,7 @@ mod tests {
             #[test]
             fn $name() {
                 let token_vec = vec![$token];
-                let tokens = TokenIterator::from(&token_vec).peekable();
+                let tokens = PrevPeekable::new(TokenIterator::from(&token_vec));
                 let mut parser = Parser::new(tokens);
                 assert_eq!(parser.expression(), Ok(Expr::Primary($token)));
             }
@@ -231,7 +276,7 @@ mod tests {
     #[test]
     fn test_unary_minus() {
         let token_vec = vec![Token::Minus(0, 0), Token::Int(1, 0, 0)];
-        let tokens = TokenIterator::from(&token_vec).peekable();
+        let tokens = PrevPeekable::new(TokenIterator::from(&token_vec));
         let mut parser = Parser::new(tokens);
         assert_eq!(parser.expression(), Ok(Expr::Unary(Token::Minus(0, 0), Box::new(Expr::Primary(Token::Int(1, 0, 0))))));
     }
@@ -239,7 +284,7 @@ mod tests {
     #[test]
     fn test_unary_bang() {
         let token_vec = vec![Token::Bang(0, 0), Token::Int(1, 0, 0)];
-        let tokens = TokenIterator::from(&token_vec).peekable();
+        let tokens = PrevPeekable::new(TokenIterator::from(&token_vec));
         let mut parser = Parser::new(tokens);
         assert_eq!(parser.expression(), Ok(Expr::Unary(Token::Bang(0, 0), Box::new(Expr::Primary(Token::Int(1, 0, 0))))));
     }
@@ -247,9 +292,9 @@ mod tests {
     #[test]
     fn test_fail_unary_plus() {
         let token_vec = vec![Token::Plus(0, 0), Token::Int(1, 0, 0)];
-        let tokens = TokenIterator::from(&token_vec).peekable();
+        let tokens = PrevPeekable::new(TokenIterator::from(&token_vec));
         let mut parser = Parser::new(tokens);
-        assert_eq!(parser.expression(), Err(ParseError::NoExpression));
+        assert_eq!(parser.expression(), Err(ParseError::UnexpectedExpression(Token::Plus(0, 0))));
     }
 
 }
