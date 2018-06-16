@@ -9,7 +9,7 @@ enum InterpreterError {
 
 #[derive(Debug, PartialEq)]
 enum ExprVal {
-    Float(f64),
+    Num(f64),
     Bool(bool),
     String(String),
 }
@@ -31,14 +31,14 @@ impl ExprVal {
 
     fn is_float(&self) -> bool {
         match *self {
-            ExprVal::Float(..) => true,
+            ExprVal::Num(..) => true,
             _ => false,
         }
     }
 
     fn get_float(self) -> Result<f64, InterpreterError> {
         match self {
-            ExprVal::Float(f) => return Ok(f),
+            ExprVal::Num(f) => return Ok(f),
             _ => Err(InterpreterError::TypeError),
         }
     }
@@ -79,7 +79,7 @@ impl Interpreter {
                     Token::Bang(..) => Ok(ExprVal::Bool(!val.get_bool()?)),
                     Token::Minus(..) => {
                         return match val {
-                            ExprVal::Float(f) => Ok(ExprVal::Float(-f)),
+                            ExprVal::Num(f) => Ok(ExprVal::Num(-f)),
                             _ => Err(InterpreterError::TypeError),
                         };
                     },
@@ -87,18 +87,28 @@ impl Interpreter {
                 }
             },
             Expr::Binary(left_side, operator, right_side) => {
-                let left_val = self.interpret(*left_side);
-                let right_val = self.interpret(*right_side);
+                let left_val = self.interpret(*left_side)?;
+                let right_val = self.interpret(*right_side)?;
+
+                macro_rules! bin_op {
+                    ($left: expr, $opr: tt, $right: expr, $expr_val: expr) => {{
+                        match ($left, $right) {
+                            (ExprVal::Num(n1), ExprVal::Num(n2)) => {
+                                return Ok($expr_val(n1 $opr n2));
+                            },
+                            _ => return Err(InterpreterError::TypeError)
+                        }
+                    }}
+                }
 
                 match operator {
-                    Token::Plus(..) => {
-                        macro_rules! bin_op {
-                            ($left: expr, $right: expr, $opr: tt) => {{
+                    Token::Plus(..) => bin_op!(left_val, +, right_val, ExprVal::Num),
+                    Token::Minus(..) => bin_op!(left_val, -, right_val, ExprVal::Num),
+                    Token::Star(..) => bin_op!(left_val, *, right_val, ExprVal::Num),
+                    Token::Slash(..) => bin_op!(left_val, /, right_val, ExprVal::Num),
+                    Token::Percent(..) => bin_op!(left_val, %, right_val, ExprVal::Num),
+                    Token::EqEq(..) => bin_op!(left_val, ==, right_val, ExprVal::Bool),
 
-                            }}
-                        }
-                        panic!();
-                    },
                     _ => panic!(),
                 }
             }
@@ -109,7 +119,7 @@ impl Interpreter {
     fn literal(&self, token: &Token) -> ExprVal {
         use token::Token::*;
         match token {
-            &Float(f, ..) => ExprVal::Float(f),
+            &Num(f, ..) => ExprVal::Num(f),
             &False(..) => ExprVal::Bool(false),
             &String(ref s, ..) => ExprVal::String(s.clone()),
             &True(..) => ExprVal::Bool(true),
@@ -122,7 +132,7 @@ impl Interpreter {
 mod tests {
     use super::*;
 
-    macro_rules! primary_test {
+    macro_rules! gen_test {
         ($name: ident, $input: expr, $expect: expr) => {
             #[test]
             fn $name() {
@@ -134,8 +144,10 @@ mod tests {
         }
     }
 
-    primary_test!(test_float_primary, Expr::Primary(Token::Float(1.0, 0, 0)), ExprVal::Float(1.0));
-    primary_test!(test_true_primary, Expr::Primary(Token::True(1, 1)), ExprVal::Bool(true));
-    primary_test!(test_false_primary, Expr::Primary(Token::False(1, 1)), ExprVal::Bool(false));
-    primary_test!(test_string_primary, Expr::Primary(Token::String("slang".to_string(), 1, 1)), ExprVal::String("slang".to_string()));
+    gen_test!(test_float_primary, Expr::Primary(Token::Num(1.0, 0, 0)), ExprVal::Num(1.0));
+    gen_test!(test_true_primary, Expr::Primary(Token::True(1, 1)), ExprVal::Bool(true));
+    gen_test!(test_false_primary, Expr::Primary(Token::False(1, 1)), ExprVal::Bool(false));
+    gen_test!(test_string_primary, Expr::Primary(Token::String("slang".to_string(), 1, 1)), ExprVal::String("slang".to_string()));
+    
+    gen_test!(test_add_binary, Expr::Binary(Box::new(Expr::Primary(Token::Num(1f64, 0, 0))), Token::Plus(0, 0), Box::new(Expr::Primary(Token::Num(1f64, 0, 0)))), ExprVal::Num(2f64));
 }

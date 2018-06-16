@@ -275,7 +275,7 @@ impl<'a> TokenIterator<'a> {
                         // Convert number to appropriate base and return result
                         if let Some(base) = radix {
                             if let Ok(num) = i64::from_str_radix(&result[2..], base) {
-                                return Some(Token::Float(num as f64, stream.row, col));
+                                return Some(Token::Num(num as f64, stream.row, col));
                             }
 
                             return Some(Token::Error(TokenError::MalformedNumber(result, stream.row))); 
@@ -283,10 +283,10 @@ impl<'a> TokenIterator<'a> {
 
                         // Parse as int or float
                         if let Ok(num) = result.parse::<i64>() {
-                            return Some(Token::Float(num as f64, stream.row, col));
+                            return Some(Token::Num(num as f64, stream.row, col));
                         }
                         else if let Ok(num) = result.parse::<f64>() {
-                            return Some(Token::Float(num, stream.row, col));
+                            return Some(Token::Num(num, stream.row, col));
                         }
 
                         // Something went wrong
@@ -489,11 +489,11 @@ mod tests {
     gen_test!(test_star_eq, "*=", Some(Token::StarEq(1, 1)));
 
     // Test numbers
-    gen_test!(test_int, "123", Some(Token::Float(123f64, 1, 1)));
-    gen_test!(test_float, "1.23", Some(Token::Float(1.23, 1, 1)));
-    gen_test!(test_hex, "0xAB12", Some(Token::Float(0xAB12 as f64, 1, 1)));
-    gen_test!(test_octal, "0o12", Some(Token::Float(0o12 as f64, 1, 1)));
-    gen_test!(test_binary, "0b11", Some(Token::Float(0b11 as f64, 1, 1)));
+    gen_test!(test_int, "123", Some(Token::Num(123f64, 1, 1)));
+    gen_test!(test_float, "1.23", Some(Token::Num(1.23, 1, 1)));
+    gen_test!(test_hex, "0xAB12", Some(Token::Num(0xAB12 as f64, 1, 1)));
+    gen_test!(test_octal, "0o12", Some(Token::Num(0o12 as f64, 1, 1)));
+    gen_test!(test_binary, "0b11", Some(Token::Num(0b11 as f64, 1, 1)));
 
     // Test keywords
     gen_test!(test_and, "and", Some(Token::And(1, 1)));
@@ -523,7 +523,7 @@ mod tests {
                                                         multiline comment
                                                         -# and"##, Some(Token::And(4, 60)));
     gen_test!(test_comment_int, r##"# This is a comment
-                                    123"##, Some(Token::Float(123f64, 2, 37)));
+                                    123"##, Some(Token::Num(123f64, 2, 37)));
 
     // Test illegal numbers
     gen_test!(test_illegal_int, "543za", Some(Token::Error(TokenError::MalformedNumber("543za".to_string(), 1))));
@@ -539,10 +539,10 @@ mod tests {
 
     #[test]
     fn test_token_vec() {
-        let tokens = vec![Token::While(0, 0), Token::Float(0f64, 0, 0)];
+        let tokens = vec![Token::While(0, 0), Token::Num(0f64, 0, 0)];
         let mut it = TokenIterator::from(&tokens);
         assert_eq!(it.next(), Some(Token::While(0, 0)));
-        assert_eq!(it.next(), Some(Token::Float(0f64, 0, 0)));
+        assert_eq!(it.next(), Some(Token::Num(0f64, 0, 0)));
         assert_eq!(it.next(), None);
     }
 
@@ -564,10 +564,10 @@ mod tests {
     }
 
     // Test inputs with two tokens
-    test_two_tokens!(test_int_and, "123 and", (Some(Token::Float(123f64, 1, 1)), Some(Token::And(1, 5))));
-    test_two_tokens!(test_float_and, "12.3 and", (Some(Token::Float(12.3, 1, 1)), Some(Token::And(1, 6))));
+    test_two_tokens!(test_int_and, "123 and", (Some(Token::Num(123f64, 1, 1)), Some(Token::And(1, 5))));
+    test_two_tokens!(test_float_and, "12.3 and", (Some(Token::Num(12.3, 1, 1)), Some(Token::And(1, 6))));
     test_two_tokens!(test_and_identifier, "and identifier", (Some(Token::And(1, 1)), Some(Token::Identifier("identifier".to_string(), 1, 5))));
-    test_two_tokens!(test_int_comma, "123,", (Some(Token::Float(123f64, 1, 1)), Some(Token::Comma(1, 4))));
+    test_two_tokens!(test_int_comma, "123,", (Some(Token::Num(123f64, 1, 1)), Some(Token::Comma(1, 4))));
     test_two_tokens!(test_bang_false, "!false", (Some(Token::Bang(1, 1)), Some(Token::False(1, 2))));
 
     /// Generates a test case that tests three tokens as input.
@@ -589,5 +589,5 @@ mod tests {
     }
 
     // Test inputs with three tokens
-    test_three_tokens!(test_int_bang_eq_int, "123 != 122", (Some(Token::Float(123f64, 1, 1)), Some(Token::BangEq(1, 5)), Some(Token::Float(122f64, 1, 8))));
+    test_three_tokens!(test_int_bang_eq_int, "123 != 122", (Some(Token::Num(123f64, 1, 1)), Some(Token::BangEq(1, 5)), Some(Token::Num(122f64, 1, 8))));
 }
