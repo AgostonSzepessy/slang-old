@@ -131,7 +131,7 @@ impl<'a> Parser<'a> {
 
     fn primary(&mut self) -> Result<Expr, ParseError> {
         // Found a primary token
-        if let Some(token) = self.match_token(&[Token::Num(0f64, 0, 0), Token::False(0, 0), Token::True(0, 0), Token::None(0, 0)]) {
+        if let Some(token) = self.match_token(&[Token::Int(0, 0, 0), Token::Float(0f64, 0, 0), Token::False(0, 0), Token::True(0, 0), Token::None(0, 0)]) {
             return Ok(Expr::Primary(token));
         }
 
@@ -234,10 +234,10 @@ mod tests {
         ($name: ident, $token: expr) => {
             #[test]
             fn $name() {
-                let token_vec = vec![Token::Num(1f64, 0, 0), $token, Token::Num(1f64, 0, 0)];
+                let token_vec = vec![Token::Int(1, 0, 0), $token, Token::Int(1, 0, 0)];
                 let tokens = PrevPeekable::new(TokenIterator::from(&token_vec));
                 let mut parser = Parser::new(tokens);
-                assert_eq!(parser.expression(), Ok(Expr::Binary(Box::new(Expr::Primary(Token::Num(1f64, 0, 0))), $token, Box::new(Expr::Primary(Token::Num(1f64, 0, 0))))));
+                assert_eq!(parser.expression(), Ok(Expr::Binary(Box::new(Expr::Primary(Token::Int(1, 0, 0))), $token, Box::new(Expr::Primary(Token::Int(1, 0, 0))))));
             }
         }
     }
@@ -268,30 +268,30 @@ mod tests {
     binary_test!(test_modulus, Token::Percent(0, 0));
 
     // Test primary expressions such as 5 and false
-    primary_test!(test_number, Token::Num(5f64, 0, 0));
+    primary_test!(test_number, Token::Int(5, 0, 0));
     primary_test!(test_false, Token::False(0, 0));
     primary_test!(test_true, Token::True(0, 0));
     primary_test!(test_none, Token::None(0, 0));
 
     #[test]
     fn test_unary_minus() {
-        let token_vec = vec![Token::Minus(0, 0), Token::Num(1f64, 0, 0)];
+        let token_vec = vec![Token::Minus(0, 0), Token::Int(1, 0, 0)];
         let tokens = PrevPeekable::new(TokenIterator::from(&token_vec));
         let mut parser = Parser::new(tokens);
-        assert_eq!(parser.expression(), Ok(Expr::Unary(Token::Minus(0, 0), Box::new(Expr::Primary(Token::Num(1f64, 0, 0))))));
+        assert_eq!(parser.expression(), Ok(Expr::Unary(Token::Minus(0, 0), Box::new(Expr::Primary(Token::Int(1, 0, 0))))));
     }
 
     #[test]
     fn test_unary_bang() {
-        let token_vec = vec![Token::Bang(0, 0), Token::Num(1f64, 0, 0)];
+        let token_vec = vec![Token::Bang(0, 0), Token::Int(1, 0, 0)];
         let tokens = PrevPeekable::new(TokenIterator::from(&token_vec));
         let mut parser = Parser::new(tokens);
-        assert_eq!(parser.expression(), Ok(Expr::Unary(Token::Bang(0, 0), Box::new(Expr::Primary(Token::Num(1f64, 0, 0))))));
+        assert_eq!(parser.expression(), Ok(Expr::Unary(Token::Bang(0, 0), Box::new(Expr::Primary(Token::Int(1, 0, 0))))));
     }
 
     #[test]
     fn test_fail_unary_plus() {
-        let token_vec = vec![Token::Plus(0, 0), Token::Num(1f64, 0, 0)];
+        let token_vec = vec![Token::Plus(0, 0), Token::Int(1, 0, 0)];
         let tokens = PrevPeekable::new(TokenIterator::from(&token_vec));
         let mut parser = Parser::new(tokens);
         assert_eq!(parser.expression(), Err(ParseError::UnexpectedExpression(Token::Plus(0, 0))));

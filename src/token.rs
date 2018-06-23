@@ -43,7 +43,8 @@ pub enum Token {
     StarEq(u32, u32),
 
     // Literals
-    Num(f64, u32, u32),
+    Int(i64, u32, u32),
+    Float(f64, u32, u32),
     String(String, u32, u32),
     Identifier(String, u32, u32),
 
@@ -98,7 +99,8 @@ impl fmt::Display for Token {
             Token::SlashEq(..) => write!(f, "/="),
             Token::Star(..) => write!(f, "*"),
             Token::StarEq(..) => write!(f, "*="),
-            Token::Num(ref i, ..) => write!(f, "{}", i),
+            Token::Int(ref i, ..) => write!(f, "{}", i),
+            Token::Float(ref i, ..) => write!(f, "{}", i),
             Token::String(ref s, ..) => write!(f, "{}", s),
             Token::Identifier(ref id, ..) => write!(f, "{}", id),
             Token::And(..) => write!(f, "and"),

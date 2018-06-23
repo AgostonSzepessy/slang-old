@@ -11,7 +11,7 @@ enum InterpreterError {
 
 #[derive(Debug, PartialEq, PartialOrd)]
 enum ExprVal {
-    Num(f64),
+    Float(f64),
     Bool(bool),
     String(String),
 }
@@ -26,7 +26,7 @@ macro_rules! impl_arithmetic {
 
             fn $fn(self, other: ExprVal) -> Result<ExprVal, InterpreterError> {
                 match (self, other) {
-                    (ExprVal::Num(n1), ExprVal::Num(n2)) => Ok(ExprVal::Num(n1 $opr n2)),
+                    (ExprVal::Float(n1), ExprVal::Float(n2)) => Ok(ExprVal::Float(n1 $opr n2)),
                     _ => Err(InterpreterError::TypeError),
                 }
             }
@@ -57,14 +57,14 @@ impl ExprVal {
 
     fn is_float(&self) -> bool {
         match *self {
-            ExprVal::Num(..) => true,
+            ExprVal::Float(..) => true,
             _ => false,
         }
     }
 
     fn get_float(self) -> Result<f64, InterpreterError> {
         match self {
-            ExprVal::Num(f) => return Ok(f),
+            ExprVal::Float(f) => return Ok(f),
             _ => Err(InterpreterError::TypeError),
         }
     }
@@ -105,7 +105,7 @@ impl Interpreter {
                     Token::Bang(..) => Ok(ExprVal::Bool(!val.get_bool()?)),
                     Token::Minus(..) => {
                         return match val {
-                            ExprVal::Num(f) => Ok(ExprVal::Num(-f)),
+                            ExprVal::Float(f) => Ok(ExprVal::Float(-f)),
                             _ => Err(InterpreterError::TypeError),
                         };
                     },
@@ -121,7 +121,7 @@ impl Interpreter {
                     ($left: expr, $opr: tt, $right: expr) => {{
                         match ($left, $right) {
                             (ExprVal::Bool(b1), ExprVal::Bool(b2)) => return Ok(ExprVal::Bool(b1 $opr b2)),
-                            (ExprVal::Num(n1), ExprVal::Num(n2)) => return Ok(ExprVal::Bool(n1 $opr n2)),
+                            (ExprVal::Float(n1), ExprVal::Float(n2)) => return Ok(ExprVal::Bool(n1 $opr n2)),
                             (ExprVal::String(s1), ExprVal::String(s2)) => return Ok(ExprVal::Bool(s1 $opr s2)),
                             _ => return Err(InterpreterError::TypeError),
                         }
@@ -150,7 +150,7 @@ impl Interpreter {
     fn literal(&self, token: &Token) -> ExprVal {
         use token::Token::*;
         match token {
-            &Num(f, ..) => ExprVal::Num(f),
+            &Float(f, ..) => ExprVal::Float(f),
             &False(..) => ExprVal::Bool(false),
             &String(ref s, ..) => ExprVal::String(s.clone()),
             &True(..) => ExprVal::Bool(true),
@@ -175,23 +175,31 @@ mod tests {
         }
     }
 
-    gen_test!(test_float_primary, Expr::Primary(Token::Num(1.0, 0, 0)), ExprVal::Num(1.0));
+    gen_test!(test_float_primary, Expr::Primary(Token::Float(1.0, 0, 0)), ExprVal::Float(1.0));
     gen_test!(test_true_primary, Expr::Primary(Token::True(1, 1)), ExprVal::Bool(true));
     gen_test!(test_false_primary, Expr::Primary(Token::False(1, 1)), ExprVal::Bool(false));
     gen_test!(test_string_primary, Expr::Primary(Token::String("slang".to_string(), 1, 1)), ExprVal::String("slang".to_string()));
 
     macro_rules! gen_binary_test {
-        ($name: ident, $opr: expr, $expect: expr) => {
+        ($name: ident, $left: expr, $opr: expr, $right: expr, $expect: expr) => {
             #[test]
             fn $name() {
                 let interpreter = Interpreter::new();
-                let result = interpreter.interpret(Expr::Binary(Box::new(Expr::Primary(Token::Num(1f64, 0, 0))), $opr, Expr::Binary(Box::new(Expr::Primary(Token::Num(1f64, 0, 0))))));
+                let result = interpreter.interpret(Expr::Binary(Box::new(Expr::Primary($left)), $opr, Box::new(Expr::Primary($right))));
 
-                assert_eq!(result, ExprVal::Num($expect));
+                assert_eq!(result, Ok($expect));
             }
         }
     }
-    
-    gen_test!(test_add_binary, Expr::Binary(Box::new(Expr::Primary(Token::Num(1f64, 0, 0))), Token::Plus(0, 0), Box::new(Expr::Primary(Token::Num(1f64, 0, 0)))), ExprVal::Num(2f64));
-    gen_binary_test!(test_eqeq, Token::EqEq(0, 0), 1f64);
+
+    gen_binary_test!(test_eqeq_false, Token::Float(1f64, 0, 0), Token::EqEq(0, 0), Token::Float(2f64, 0, 0), ExprVal::Bool(false));
+    gen_binary_test!(test_eqeq_true, Token::Float(1f64, 0, 0), Token::EqEq(0, 0), Token::Float(1f64, 0, 0), ExprVal::Bool(true));
+    gen_binary_test!(test_less_false, Token::Float(2f64, 0, 0), Token::Less(0, 0), Token::Float(1f64, 0, 0), ExprVal::Bool(false));
+    gen_binary_test!(test_less_true, Token::Float(1f64, 0, 0), Token::Less(0, 0), Token::Float(2f64, 0, 0), ExprVal::Bool(true));
+    gen_binary_test!(test_less_eq_false, Token::Float(2f64, 0, 0), Token::LessEq(0, 0), Token::Float(1f64, 0, 0), ExprVal::Bool(false));
+    gen_binary_test!(test_less_eq_true, Token::Float(1f64, 0, 0), Token::LessEq(0, 0), Token::Float(1f64, 0, 0), ExprVal::Bool(true));
+    gen_binary_test!(test_add, Token::Float(1f64, 0, 0), Token::Plus(0, 0), Token::Float(1f64, 0, 0), ExprVal::Float(2f64));
+    gen_binary_test!(test_sub, Token::Float(2f64, 0, 0), Token::Minus(0, 0), Token::Float(1f64, 0, 0), ExprVal::Float(1f64));
+    gen_binary_test!(test_div, Token::Float(4f64, 0, 0), Token::Slash(0, 0), Token::Float(2f64, 0, 0), ExprVal::Float(2f64));
+    gen_binary_test!(test_mul, Token::Float(2f64, 0, 0), Token::Star(0, 0), Token::Float(2f64, 0, 0), ExprVal::Float(4f64));
 }
