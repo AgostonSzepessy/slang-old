@@ -1,7 +1,7 @@
 use parser::Expr;
 use token::Token;
 
-use std::ops::{Add, Div, Mul, Sub};
+use std::ops::{Add, Div, Mul, Rem, Sub};
 
 #[derive(Debug, PartialEq, Fail)]
 enum InterpreterError {
@@ -11,6 +11,7 @@ enum InterpreterError {
 
 #[derive(Debug, PartialEq, PartialOrd)]
 enum ExprVal {
+    Int(i64),
     Float(f64),
     Bool(bool),
     String(String),
@@ -26,6 +27,7 @@ macro_rules! impl_arithmetic {
 
             fn $fn(self, other: ExprVal) -> Result<ExprVal, InterpreterError> {
                 match (self, other) {
+                    (ExprVal::Int(i1), ExprVal::Int(i2)) => Ok(ExprVal::Int(i1 $opr i2)),
                     (ExprVal::Float(n1), ExprVal::Float(n2)) => Ok(ExprVal::Float(n1 $opr n2)),
                     _ => Err(InterpreterError::TypeError),
                 }
@@ -37,6 +39,7 @@ macro_rules! impl_arithmetic {
 impl_arithmetic!(Add, add, +);
 impl_arithmetic!(Mul, mul, *);
 impl_arithmetic!(Sub, sub, -);
+impl_arithmetic!(Rem, rem, %);
 impl_arithmetic!(Div, div, /);
 
 
@@ -105,6 +108,7 @@ impl Interpreter {
                     Token::Bang(..) => Ok(ExprVal::Bool(!val.get_bool()?)),
                     Token::Minus(..) => {
                         return match val {
+                            ExprVal::Int(i) => Ok(ExprVal::Int(-i)),
                             ExprVal::Float(f) => Ok(ExprVal::Float(-f)),
                             _ => Err(InterpreterError::TypeError),
                         };
@@ -122,6 +126,7 @@ impl Interpreter {
                         match ($left, $right) {
                             (ExprVal::Bool(b1), ExprVal::Bool(b2)) => return Ok(ExprVal::Bool(b1 $opr b2)),
                             (ExprVal::Float(n1), ExprVal::Float(n2)) => return Ok(ExprVal::Bool(n1 $opr n2)),
+                            (ExprVal::Int(i1), ExprVal::Int(i2)) => return Ok(ExprVal::Bool(i1 $opr i2)),
                             (ExprVal::String(s1), ExprVal::String(s2)) => return Ok(ExprVal::Bool(s1 $opr s2)),
                             _ => return Err(InterpreterError::TypeError),
                         }
@@ -132,6 +137,7 @@ impl Interpreter {
                     Token::Plus(..) => left_val + right_val,
                     Token::Minus(..) => left_val - right_val,
                     Token::Star(..) => left_val * right_val,
+                    Token::Percent(..) => left_val % right_val,
                     Token::Slash(..) => left_val / right_val,
                     Token::EqEq(..) => bool_impl!(left_val, ==, right_val),
                     Token::BangEq(..) => bool_impl!(left_val, !=, right_val),
@@ -150,6 +156,7 @@ impl Interpreter {
     fn literal(&self, token: &Token) -> ExprVal {
         use token::Token::*;
         match token {
+            &Int(i, ..) => ExprVal::Int(i),
             &Float(f, ..) => ExprVal::Float(f),
             &False(..) => ExprVal::Bool(false),
             &String(ref s, ..) => ExprVal::String(s.clone()),
@@ -175,6 +182,7 @@ mod tests {
         }
     }
 
+    gen_test!(test_int_primary, Expr::Primary(Token::Int(1, 0, 0)), ExprVal::Int(1));
     gen_test!(test_float_primary, Expr::Primary(Token::Float(1.0, 0, 0)), ExprVal::Float(1.0));
     gen_test!(test_true_primary, Expr::Primary(Token::True(1, 1)), ExprVal::Bool(true));
     gen_test!(test_false_primary, Expr::Primary(Token::False(1, 1)), ExprVal::Bool(false));
@@ -192,14 +200,28 @@ mod tests {
         }
     }
 
-    gen_binary_test!(test_eqeq_false, Token::Float(1f64, 0, 0), Token::EqEq(0, 0), Token::Float(2f64, 0, 0), ExprVal::Bool(false));
-    gen_binary_test!(test_eqeq_true, Token::Float(1f64, 0, 0), Token::EqEq(0, 0), Token::Float(1f64, 0, 0), ExprVal::Bool(true));
-    gen_binary_test!(test_less_false, Token::Float(2f64, 0, 0), Token::Less(0, 0), Token::Float(1f64, 0, 0), ExprVal::Bool(false));
-    gen_binary_test!(test_less_true, Token::Float(1f64, 0, 0), Token::Less(0, 0), Token::Float(2f64, 0, 0), ExprVal::Bool(true));
-    gen_binary_test!(test_less_eq_false, Token::Float(2f64, 0, 0), Token::LessEq(0, 0), Token::Float(1f64, 0, 0), ExprVal::Bool(false));
-    gen_binary_test!(test_less_eq_true, Token::Float(1f64, 0, 0), Token::LessEq(0, 0), Token::Float(1f64, 0, 0), ExprVal::Bool(true));
-    gen_binary_test!(test_add, Token::Float(1f64, 0, 0), Token::Plus(0, 0), Token::Float(1f64, 0, 0), ExprVal::Float(2f64));
-    gen_binary_test!(test_sub, Token::Float(2f64, 0, 0), Token::Minus(0, 0), Token::Float(1f64, 0, 0), ExprVal::Float(1f64));
-    gen_binary_test!(test_div, Token::Float(4f64, 0, 0), Token::Slash(0, 0), Token::Float(2f64, 0, 0), ExprVal::Float(2f64));
-    gen_binary_test!(test_mul, Token::Float(2f64, 0, 0), Token::Star(0, 0), Token::Float(2f64, 0, 0), ExprVal::Float(4f64));
+    gen_binary_test!(test_float_eqeq_false, Token::Float(1f64, 0, 0), Token::EqEq(0, 0), Token::Float(2f64, 0, 0), ExprVal::Bool(false));
+    gen_binary_test!(test_float_eqeq_true, Token::Float(1f64, 0, 0), Token::EqEq(0, 0), Token::Float(1f64, 0, 0), ExprVal::Bool(true));
+    gen_binary_test!(test_float_less_false, Token::Float(2f64, 0, 0), Token::Less(0, 0), Token::Float(1f64, 0, 0), ExprVal::Bool(false));
+    gen_binary_test!(test_float_less_true, Token::Float(1f64, 0, 0), Token::Less(0, 0), Token::Float(2f64, 0, 0), ExprVal::Bool(true));
+    gen_binary_test!(test_float_less_eq_false, Token::Float(2f64, 0, 0), Token::LessEq(0, 0), Token::Float(1f64, 0, 0), ExprVal::Bool(false));
+    gen_binary_test!(test_float_less_eq_true, Token::Float(1f64, 0, 0), Token::LessEq(0, 0), Token::Float(1f64, 0, 0), ExprVal::Bool(true));
+    gen_binary_test!(test_float_add, Token::Float(1f64, 0, 0), Token::Plus(0, 0), Token::Float(1f64, 0, 0), ExprVal::Float(2f64));
+    gen_binary_test!(test_float_sub, Token::Float(2f64, 0, 0), Token::Minus(0, 0), Token::Float(1f64, 0, 0), ExprVal::Float(1f64));
+    gen_binary_test!(test_float_div, Token::Float(4f64, 0, 0), Token::Slash(0, 0), Token::Float(2f64, 0, 0), ExprVal::Float(2f64));
+    gen_binary_test!(test_float_mul, Token::Float(2f64, 0, 0), Token::Star(0, 0), Token::Float(2f64, 0, 0), ExprVal::Float(4f64));
+    gen_binary_test!(test_float_rem, Token::Float(5f64, 0, 0), Token::Percent(0, 0), Token::Float(2.4f64, 0, 0), ExprVal::Float(0.20000000000000018f64));
+
+    gen_binary_test!(test_int_eqeq_false, Token::Int(1, 0, 0), Token::EqEq(0, 0), Token::Int(2, 0, 0), ExprVal::Bool(false));
+    gen_binary_test!(test_int_eqeq_true, Token::Int(1, 0, 0), Token::EqEq(0, 0), Token::Int(1, 0, 0), ExprVal::Bool(true));
+    gen_binary_test!(test_int_less_false, Token::Int(2, 0, 0), Token::Less(0, 0), Token::Int(1, 0, 0), ExprVal::Bool(false));
+    gen_binary_test!(test_int_less_true, Token::Int(1, 0, 0), Token::Less(0, 0), Token::Int(2, 0, 0), ExprVal::Bool(true));
+    gen_binary_test!(test_int_less_eq_false, Token::Int(2, 0, 0), Token::LessEq(0, 0), Token::Int(1, 0, 0), ExprVal::Bool(false));
+    gen_binary_test!(test_int_less_eq_true, Token::Int(1, 0, 0), Token::LessEq(0, 0), Token::Int(1, 0, 0), ExprVal::Bool(true));
+    gen_binary_test!(test_int_add, Token::Int(1, 0, 0), Token::Plus(0, 0), Token::Int(1, 0, 0), ExprVal::Int(2));
+    gen_binary_test!(test_int_sub, Token::Int(2, 0, 0), Token::Minus(0, 0), Token::Int(1, 0, 0), ExprVal::Int(1));
+    gen_binary_test!(test_int_div, Token::Int(4, 0, 0), Token::Slash(0, 0), Token::Int(2, 0, 0), ExprVal::Int(2));
+    gen_binary_test!(test_int_mul, Token::Int(2, 0, 0), Token::Star(0, 0), Token::Int(2, 0, 0), ExprVal::Int(4));
+    gen_binary_test!(test_int_rem, Token::Int(5, 0, 0), Token::Percent(0, 0), Token::Int(2, 0, 0), ExprVal::Int(1));
+
 }
