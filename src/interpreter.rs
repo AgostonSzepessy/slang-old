@@ -1,5 +1,4 @@
-use parser::Expr;
-use token::Token;
+use parser::{Expr, ParseToken};
 
 use std::ops::{Add, Div, Mul, Rem, Sub};
 
@@ -105,8 +104,8 @@ impl Interpreter {
                 let val = self.interpret(*ex)?;
 
                 match token {
-                    Token::Bang(..) => Ok(ExprVal::Bool(!val.get_bool()?)),
-                    Token::Minus(..) => {
+                    ParseToken::Bang(..) => Ok(ExprVal::Bool(!val.get_bool()?)),
+                    ParseToken::Minus(..) => {
                         return match val {
                             ExprVal::Int(i) => Ok(ExprVal::Int(-i)),
                             ExprVal::Float(f) => Ok(ExprVal::Float(-f)),
@@ -124,27 +123,41 @@ impl Interpreter {
                 macro_rules! bool_impl {
                     ($left: expr, $opr: tt, $right: expr) => {{
                         match ($left, $right) {
-                            (ExprVal::Bool(b1), ExprVal::Bool(b2)) => return Ok(ExprVal::Bool(b1 $opr b2)),
-                            (ExprVal::Float(n1), ExprVal::Float(n2)) => return Ok(ExprVal::Bool(n1 $opr n2)),
-                            (ExprVal::Int(i1), ExprVal::Int(i2)) => return Ok(ExprVal::Bool(i1 $opr i2)),
-                            (ExprVal::String(s1), ExprVal::String(s2)) => return Ok(ExprVal::Bool(s1 $opr s2)),
-                            _ => return Err(InterpreterError::TypeError),
+                            (ExprVal::Bool(b1), ExprVal::Bool(b2)) => Ok(ExprVal::Bool(b1 $opr b2)),
+                            (ExprVal::Float(n1), ExprVal::Float(n2)) => Ok(ExprVal::Bool(n1 $opr n2)),
+                            (ExprVal::Int(i1), ExprVal::Int(i2)) => Ok(ExprVal::Bool(i1 $opr i2)),
+                            (ExprVal::String(s1), ExprVal::String(s2)) => Ok(ExprVal::Bool(s1 $opr s2)),
+                            _ => Err(InterpreterError::TypeError),
                         }
                     }}
                 }
 
                 match operator {
-                    Token::Plus(..) => left_val + right_val,
-                    Token::Minus(..) => left_val - right_val,
-                    Token::Star(..) => left_val * right_val,
-                    Token::Percent(..) => left_val % right_val,
-                    Token::Slash(..) => left_val / right_val,
-                    Token::EqEq(..) => bool_impl!(left_val, ==, right_val),
-                    Token::BangEq(..) => bool_impl!(left_val, !=, right_val),
-                    Token::Greater(..) => bool_impl!(left_val, >, right_val),
-                    Token::GreaterEq(..) => bool_impl!(left_val, >=, right_val),
-                    Token::Less(..) => bool_impl!(left_val, <, right_val),
-                    Token::LessEq(..) => bool_impl!(left_val, <=, right_val),
+                    ParseToken::Plus(..) => left_val + right_val,
+                    ParseToken::Minus(..) => left_val - right_val,
+                    ParseToken::Star(..) => left_val * right_val,
+                    ParseToken::Percent(..) => left_val % right_val,
+                    ParseToken::Slash(..) => left_val / right_val,
+                    ParseToken::EqEq(..) => {
+                        let val = bool_impl!(left_val, ==, right_val);
+                        if let Err(_) = val {
+                            return Ok(ExprVal::Bool(false));
+                        }
+
+                        return val;
+                    },
+                    ParseToken::BangEq(..) => {
+                        let val = bool_impl!(left_val, !=, right_val);
+                        if let Err(_) = val {
+                            return Ok(ExprVal::Bool(true));
+                        }
+
+                        return val;
+                    },
+                    ParseToken::Greater(..) => bool_impl!(left_val, >, right_val),
+                    ParseToken::GreaterEq(..) => bool_impl!(left_val, >=, right_val),
+                    ParseToken::Less(..) => bool_impl!(left_val, <, right_val),
+                    ParseToken::LessEq(..) => bool_impl!(left_val, <=, right_val),
 
                     _ => panic!(),
                 }
@@ -153,8 +166,8 @@ impl Interpreter {
         }
     }
 
-    fn literal(&self, token: &Token) -> ExprVal {
-        use token::Token::*;
+    fn literal(&self, token: &ParseToken) -> ExprVal {
+        use parser::ParseToken::*;
         match token {
             &Int(i, ..) => ExprVal::Int(i),
             &Float(f, ..) => ExprVal::Float(f),
@@ -182,11 +195,11 @@ mod tests {
         }
     }
 
-    gen_test!(test_int_primary, Expr::Primary(Token::Int(1, 0, 0)), ExprVal::Int(1));
-    gen_test!(test_float_primary, Expr::Primary(Token::Float(1.0, 0, 0)), ExprVal::Float(1.0));
-    gen_test!(test_true_primary, Expr::Primary(Token::True(1, 1)), ExprVal::Bool(true));
-    gen_test!(test_false_primary, Expr::Primary(Token::False(1, 1)), ExprVal::Bool(false));
-    gen_test!(test_string_primary, Expr::Primary(Token::String("slang".to_string(), 1, 1)), ExprVal::String("slang".to_string()));
+    gen_test!(test_int_primary, Expr::Primary(ParseToken::Int(1, 0, 0)), ExprVal::Int(1));
+    gen_test!(test_float_primary, Expr::Primary(ParseToken::Float(1.0, 0, 0)), ExprVal::Float(1.0));
+    gen_test!(test_true_primary, Expr::Primary(ParseToken::True(1, 1)), ExprVal::Bool(true));
+    gen_test!(test_false_primary, Expr::Primary(ParseToken::False(1, 1)), ExprVal::Bool(false));
+    gen_test!(test_string_primary, Expr::Primary(ParseToken::String("slang".to_string(), 1, 1)), ExprVal::String("slang".to_string()));
 
     macro_rules! gen_binary_test {
         ($name: ident, $left: expr, $opr: expr, $right: expr, $expect: expr) => {
@@ -200,28 +213,30 @@ mod tests {
         }
     }
 
-    gen_binary_test!(test_float_eqeq_false, Token::Float(1f64, 0, 0), Token::EqEq(0, 0), Token::Float(2f64, 0, 0), ExprVal::Bool(false));
-    gen_binary_test!(test_float_eqeq_true, Token::Float(1f64, 0, 0), Token::EqEq(0, 0), Token::Float(1f64, 0, 0), ExprVal::Bool(true));
-    gen_binary_test!(test_float_less_false, Token::Float(2f64, 0, 0), Token::Less(0, 0), Token::Float(1f64, 0, 0), ExprVal::Bool(false));
-    gen_binary_test!(test_float_less_true, Token::Float(1f64, 0, 0), Token::Less(0, 0), Token::Float(2f64, 0, 0), ExprVal::Bool(true));
-    gen_binary_test!(test_float_less_eq_false, Token::Float(2f64, 0, 0), Token::LessEq(0, 0), Token::Float(1f64, 0, 0), ExprVal::Bool(false));
-    gen_binary_test!(test_float_less_eq_true, Token::Float(1f64, 0, 0), Token::LessEq(0, 0), Token::Float(1f64, 0, 0), ExprVal::Bool(true));
-    gen_binary_test!(test_float_add, Token::Float(1f64, 0, 0), Token::Plus(0, 0), Token::Float(1f64, 0, 0), ExprVal::Float(2f64));
-    gen_binary_test!(test_float_sub, Token::Float(2f64, 0, 0), Token::Minus(0, 0), Token::Float(1f64, 0, 0), ExprVal::Float(1f64));
-    gen_binary_test!(test_float_div, Token::Float(4f64, 0, 0), Token::Slash(0, 0), Token::Float(2f64, 0, 0), ExprVal::Float(2f64));
-    gen_binary_test!(test_float_mul, Token::Float(2f64, 0, 0), Token::Star(0, 0), Token::Float(2f64, 0, 0), ExprVal::Float(4f64));
-    gen_binary_test!(test_float_rem, Token::Float(5f64, 0, 0), Token::Percent(0, 0), Token::Float(2.4f64, 0, 0), ExprVal::Float(0.20000000000000018f64));
+    gen_binary_test!(test_float_eqeq_false, ParseToken::Float(1f64, 0, 0), ParseToken::EqEq(0, 0), ParseToken::Float(2f64, 0, 0), ExprVal::Bool(false));
+    gen_binary_test!(test_float_eqeq_true, ParseToken::Float(1f64, 0, 0), ParseToken::EqEq(0, 0), ParseToken::Float(1f64, 0, 0), ExprVal::Bool(true));
+    gen_binary_test!(test_float_less_false, ParseToken::Float(2f64, 0, 0), ParseToken::Less(0, 0), ParseToken::Float(1f64, 0, 0), ExprVal::Bool(false));
+    gen_binary_test!(test_float_less_true, ParseToken::Float(1f64, 0, 0), ParseToken::Less(0, 0), ParseToken::Float(2f64, 0, 0), ExprVal::Bool(true));
+    gen_binary_test!(test_float_less_eq_false, ParseToken::Float(2f64, 0, 0), ParseToken::LessEq(0, 0), ParseToken::Float(1f64, 0, 0), ExprVal::Bool(false));
+    gen_binary_test!(test_float_less_eq_true, ParseToken::Float(1f64, 0, 0), ParseToken::LessEq(0, 0), ParseToken::Float(1f64, 0, 0), ExprVal::Bool(true));
+    gen_binary_test!(test_float_add, ParseToken::Float(1f64, 0, 0), ParseToken::Plus(0, 0), ParseToken::Float(1f64, 0, 0), ExprVal::Float(2f64));
+    gen_binary_test!(test_float_sub, ParseToken::Float(2f64, 0, 0), ParseToken::Minus(0, 0), ParseToken::Float(1f64, 0, 0), ExprVal::Float(1f64));
+    gen_binary_test!(test_float_div, ParseToken::Float(4f64, 0, 0), ParseToken::Slash(0, 0), ParseToken::Float(2f64, 0, 0), ExprVal::Float(2f64));
+    gen_binary_test!(test_float_mul, ParseToken::Float(2f64, 0, 0), ParseToken::Star(0, 0), ParseToken::Float(2f64, 0, 0), ExprVal::Float(4f64));
+    gen_binary_test!(test_float_rem, ParseToken::Float(5f64, 0, 0), ParseToken::Percent(0, 0), ParseToken::Float(2.4f64, 0, 0), ExprVal::Float(0.20000000000000018f64));
 
-    gen_binary_test!(test_int_eqeq_false, Token::Int(1, 0, 0), Token::EqEq(0, 0), Token::Int(2, 0, 0), ExprVal::Bool(false));
-    gen_binary_test!(test_int_eqeq_true, Token::Int(1, 0, 0), Token::EqEq(0, 0), Token::Int(1, 0, 0), ExprVal::Bool(true));
-    gen_binary_test!(test_int_less_false, Token::Int(2, 0, 0), Token::Less(0, 0), Token::Int(1, 0, 0), ExprVal::Bool(false));
-    gen_binary_test!(test_int_less_true, Token::Int(1, 0, 0), Token::Less(0, 0), Token::Int(2, 0, 0), ExprVal::Bool(true));
-    gen_binary_test!(test_int_less_eq_false, Token::Int(2, 0, 0), Token::LessEq(0, 0), Token::Int(1, 0, 0), ExprVal::Bool(false));
-    gen_binary_test!(test_int_less_eq_true, Token::Int(1, 0, 0), Token::LessEq(0, 0), Token::Int(1, 0, 0), ExprVal::Bool(true));
-    gen_binary_test!(test_int_add, Token::Int(1, 0, 0), Token::Plus(0, 0), Token::Int(1, 0, 0), ExprVal::Int(2));
-    gen_binary_test!(test_int_sub, Token::Int(2, 0, 0), Token::Minus(0, 0), Token::Int(1, 0, 0), ExprVal::Int(1));
-    gen_binary_test!(test_int_div, Token::Int(4, 0, 0), Token::Slash(0, 0), Token::Int(2, 0, 0), ExprVal::Int(2));
-    gen_binary_test!(test_int_mul, Token::Int(2, 0, 0), Token::Star(0, 0), Token::Int(2, 0, 0), ExprVal::Int(4));
-    gen_binary_test!(test_int_rem, Token::Int(5, 0, 0), Token::Percent(0, 0), Token::Int(2, 0, 0), ExprVal::Int(1));
+    gen_binary_test!(test_int_eqeq_false, ParseToken::Int(1, 0, 0), ParseToken::EqEq(0, 0), ParseToken::Int(2, 0, 0), ExprVal::Bool(false));
+    gen_binary_test!(test_int_eqeq_true, ParseToken::Int(1, 0, 0), ParseToken::EqEq(0, 0), ParseToken::Int(1, 0, 0), ExprVal::Bool(true));
+    gen_binary_test!(test_int_less_false, ParseToken::Int(2, 0, 0), ParseToken::Less(0, 0), ParseToken::Int(1, 0, 0), ExprVal::Bool(false));
+    gen_binary_test!(test_int_less_true, ParseToken::Int(1, 0, 0), ParseToken::Less(0, 0), ParseToken::Int(2, 0, 0), ExprVal::Bool(true));
+    gen_binary_test!(test_int_less_eq_false, ParseToken::Int(2, 0, 0), ParseToken::LessEq(0, 0), ParseToken::Int(1, 0, 0), ExprVal::Bool(false));
+    gen_binary_test!(test_int_less_eq_true, ParseToken::Int(1, 0, 0), ParseToken::LessEq(0, 0), ParseToken::Int(1, 0, 0), ExprVal::Bool(true));
+    gen_binary_test!(test_int_add, ParseToken::Int(1, 0, 0), ParseToken::Plus(0, 0), ParseToken::Int(1, 0, 0), ExprVal::Int(2));
+    gen_binary_test!(test_int_sub, ParseToken::Int(2, 0, 0), ParseToken::Minus(0, 0), ParseToken::Int(1, 0, 0), ExprVal::Int(1));
+    gen_binary_test!(test_int_div, ParseToken::Int(4, 0, 0), ParseToken::Slash(0, 0), ParseToken::Int(2, 0, 0), ExprVal::Int(2));
+    gen_binary_test!(test_int_mul, ParseToken::Int(2, 0, 0), ParseToken::Star(0, 0), ParseToken::Int(2, 0, 0), ExprVal::Int(4));
+    gen_binary_test!(test_int_rem, ParseToken::Int(5, 0, 0), ParseToken::Percent(0, 0), ParseToken::Int(2, 0, 0), ExprVal::Int(1));
 
+    gen_binary_test!(test_eqeq_float_int, ParseToken::Int(1, 0, 0), ParseToken::EqEq(0, 0), ParseToken::Float(1.0, 0, 0), ExprVal::Bool(false));
+    gen_binary_test!(test_neeq_float_int, ParseToken::Int(1, 0, 0), ParseToken::BangEq(0, 0), ParseToken::Float(1.0, 0, 0), ExprVal::Bool(true));
 }
