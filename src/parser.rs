@@ -5,6 +5,8 @@ use std::fmt;
 
 use prev_iter::PrevPeekable;
 
+/// Tokens that are used to build the AST; more specialized
+/// than the tokens returned by the tokenizer.
 #[derive(Debug, PartialEq)]
 pub enum ParseToken {
     Bang(u32, u32),
@@ -68,6 +70,18 @@ pub enum Expr {
     Grouping(Box<Expr>),
 }
 
+/// `Stmt` represents the possible statements that can be created.
+/// There are several different kinds:
+/// * `Print`: Prints an expression to the console
+/// * `Expression`: Represents an expression
+#[derive(Debug, PartialEq)]
+pub enum Stmt {
+    /// Print statements
+    Print(Expr),
+    /// Expression statements
+    Expression(Expr),
+}
+
 #[derive(Debug, PartialEq, Fail)]
 pub enum ParseError {
     #[fail(display = "Error: expected {}", _0)]
@@ -96,8 +110,33 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Expr, ParseError> {
-        self.expression()
+    pub fn parse(&mut self) -> Result<Vec<Stmt>, ParseError> {
+        let mut statements = Vec::new();
+
+        while self.tokens.peek() != None {
+            statements.push(self.statement()?);
+        }
+
+        Ok(statements)
+    }
+
+    fn statement(&mut self) -> Result<Stmt, ParseError> {
+        match self.tokens.next() {
+            None => Err(ParseError::Eof),
+            Some(Token::Print(..)) => Ok(self.finish_print_stmt()?),
+            _ => Ok(Stmt::Expression(self.expression()?)),
+        }
+    }
+
+    fn finish_print_stmt(&mut self) -> Result<Stmt, ParseError> {
+        // Print token has already been consumed so we need to consume
+        // the right parenthesis
+        self.consume(Token::RightParen(0, 0))?;
+        let expr = self.expression()?;
+        self.consume(Token::LeftParen(0, 0))?;
+        self.consume(Token::Semicolon(0, 0))?;
+
+        Ok(Stmt::Print(expr))
     }
 
     fn expression(&mut self) -> Result<Expr, ParseError> {

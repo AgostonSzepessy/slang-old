@@ -65,6 +65,7 @@ pub enum Token {
     Fn(u32, u32),
     Let(u32, u32),
     None(u32, u32),
+    Print(u32, u32),
     Ret(u32, u32),
     Slf(u32, u32),
     True(u32, u32),
@@ -119,6 +120,7 @@ impl fmt::Display for Token {
             Token::Fn(..) => write!(f, "fn"),
             Token::Let(..) => write!(f, "let"),
             Token::None(..) => write!(f, "none"),
+            Token::Print(..) => write!(f, "print"),
             Token::Ret(..) => write!(f, "ret"),
             Token::Slf(..) => write!(f, "self"),
             Token::True(..) => write!(f, "true"),
@@ -229,6 +231,7 @@ impl<'a> TokenIterator<'a> {
                             "fn" => return Some(Token::Fn(stream.row, col)),
                             "let" => return Some(Token::Let(stream.row, col)),
                             "none" => return Some(Token::None(stream.row, col)),
+                            "print" => return Some(Token::Print(stream.row, col)),
                             "ret" => return Some(Token::Ret(stream.row, col)),
                             "self" => return Some(Token::Slf(stream.row, col)),
                             "true" => return Some(Token::True(stream.row, col)),
@@ -627,6 +630,7 @@ mod tests {
     gen_test!(test_fn, "fn", Some(Token::Fn(1, 1)));
     gen_test!(test_let, "let", Some(Token::Let(1, 1)));
     gen_test!(test_none, "none", Some(Token::None(1, 1)));
+    gen_test!(test_print, "print", Some(Token::Print(1, 1)));
     gen_test!(test_ret, "ret", Some(Token::Ret(1, 1)));
     gen_test!(test_self, "self", Some(Token::Slf(1, 1)));
     gen_test!(test_true, "true", Some(Token::True(1, 1)));
