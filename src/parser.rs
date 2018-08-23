@@ -35,6 +35,9 @@ pub enum ParseToken {
     True(u32, u32),
     String(String, u32, u32),
     None(u32, u32),
+
+    /// Used to represent a token that doesn't get included in the AST
+    DiscardedToken,
 }
 
 /// A vector meant to store tokens and display them.
@@ -104,9 +107,9 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(tokens: PrevPeekable<TokenIterator<'a>>) -> Self {
+    pub fn new(tokens: TokenIterator<'a>) -> Self {
         Parser {
-            tokens: tokens,
+            tokens: PrevPeekable::new(tokens),
         }
     }
 
@@ -128,12 +131,13 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Creates a Print statement
     fn finish_print_stmt(&mut self) -> Result<Stmt, ParseError> {
         // Print token has already been consumed so we need to consume
         // the right parenthesis
-        self.consume(Token::RightParen(0, 0))?;
-        let expr = self.expression()?;
         self.consume(Token::LeftParen(0, 0))?;
+        let expr = self.expression()?;
+        self.consume(Token::RightParen(0, 0))?;
         self.consume(Token::Semicolon(0, 0))?;
 
         Ok(Stmt::Print(expr))
@@ -198,7 +202,7 @@ impl<'a> Parser<'a> {
 
     fn primary(&mut self) -> Result<Expr, ParseError> {
         // Found a primary token
-        if let Some(token) = self.match_token(&[Token::Int(0, 0, 0), Token::Float(0f64, 0, 0), Token::False(0, 0), Token::True(0, 0), Token::None(0, 0)]) {
+        if let Some(token) = self.match_token(&[Token::Int(0, 0, 0), Token::Float(0f64, 0, 0), Token::False(0, 0), Token::True(0, 0), Token::None(0, 0), Token::String(String::new(), 0, 0)]) {
             return Ok(Expr::Primary(token));
         }
 
@@ -263,6 +267,8 @@ impl<'a> Parser<'a> {
                 False(c, r) => Some(ParseToken::False(c, r)),
                 String(s, c, r) => Some(ParseToken::String(s, c, r)),
                 True(c, r) => Some(ParseToken::True(c, r)),
+                LeftParen(..) | RightParen(..) => Some(ParseToken::DiscardedToken),
+                Semicolon(..) => Some(ParseToken::DiscardedToken),
                 _ => unreachable!(),
             };
         }
@@ -276,7 +282,6 @@ impl<'a> Parser<'a> {
     /// Parameters: `token`: `Token` to check for.
     fn consume(&mut self, token: Token) -> Result<(), ParseError> {
         if let Some(_) = self.match_token(&[(token.clone())]) {
-            self.tokens.next();
             return Ok(());
         }
 
@@ -328,7 +333,7 @@ mod tests {
             #[test]
             fn $name() {
                 let token_vec = vec![Token::Int(1, 0, 0), $token_input, Token::Int(1, 0, 0)];
-                let tokens = PrevPeekable::new(TokenIterator::from(&token_vec));
+                let tokens = TokenIterator::from(&token_vec);
                 let mut parser = Parser::new(tokens);
                 assert_eq!(parser.expression(), Ok(Expr::Binary(Box::new(Expr::Primary(ParseToken::Int(1, 0, 0))), $token_result, Box::new(Expr::Primary(ParseToken::Int(1, 0, 0))))));
             }
@@ -340,7 +345,7 @@ mod tests {
             #[test]
             fn $name() {
                 let token_vec = vec![$token_input];
-                let tokens = PrevPeekable::new(TokenIterator::from(&token_vec));
+                let tokens = TokenIterator::from(&token_vec);
                 let mut parser = Parser::new(tokens);
                 assert_eq!(parser.expression(), Ok(Expr::Primary($token_result)));
             }
@@ -369,7 +374,7 @@ mod tests {
     #[test]
     fn test_unary_minus() {
         let token_vec = vec![Token::Minus(0, 0), Token::Int(1, 0, 0)];
-        let tokens = PrevPeekable::new(TokenIterator::from(&token_vec));
+        let tokens = TokenIterator::from(&token_vec);
         let mut parser = Parser::new(tokens);
         assert_eq!(parser.expression(), Ok(Expr::Unary(ParseToken::Minus(0, 0), Box::new(Expr::Primary(ParseToken::Int(1, 0, 0))))));
     }
@@ -377,7 +382,7 @@ mod tests {
     #[test]
     fn test_unary_bang() {
         let token_vec = vec![Token::Bang(0, 0), Token::Int(1, 0, 0)];
-        let tokens = PrevPeekable::new(TokenIterator::from(&token_vec));
+        let tokens = TokenIterator::from(&token_vec);
         let mut parser = Parser::new(tokens);
         assert_eq!(parser.expression(), Ok(Expr::Unary(ParseToken::Bang(0, 0), Box::new(Expr::Primary(ParseToken::Int(1, 0, 0))))));
     }
@@ -385,7 +390,7 @@ mod tests {
     #[test]
     fn test_fail_unary_plus() {
         let token_vec = vec![Token::Plus(0, 0), Token::Int(1, 0, 0)];
-        let tokens = PrevPeekable::new(TokenIterator::from(&token_vec));
+        let tokens = TokenIterator::from(&token_vec);
         let mut parser = Parser::new(tokens);
         assert_eq!(parser.expression(), Err(ParseError::UnexpectedExpression(Token::Plus(0, 0))));
     }

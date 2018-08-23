@@ -1,18 +1,19 @@
-use parser::{Expr, ParseToken};
+use parser::{Expr, ParseToken, Stmt};
 
 use std::ops::{Add, Div, Mul, Rem, Sub};
 
 #[derive(Debug, PartialEq, Fail)]
-enum InterpreterError {
+pub enum InterpreterError {
     #[fail(display = "Type error")]
     TypeError,
 }
 
 #[derive(Debug, PartialEq, PartialOrd)]
-enum ExprVal {
+pub enum ExprVal {
     Int(i64),
     Float(f64),
     Bool(bool),
+    None,
     String(String),
 }
 
@@ -87,7 +88,7 @@ impl ExprVal {
 }
 
 #[derive(Debug, PartialEq)]
-struct Interpreter {
+pub struct Interpreter {
 }
 
 impl Interpreter {
@@ -96,12 +97,29 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&self, expr: Expr) -> Result<ExprVal, InterpreterError> {
+    pub fn interpret(&self, stmts: Vec<Stmt>) -> Result<(), InterpreterError> {
+        for stmt in stmts {
+            match stmt {
+                Stmt::Print(e) => self.print_stmt(e)?,
+                _ => unreachable!(),
+            };
+        }
+
+        Ok(())
+    }
+
+    fn print_stmt(&self, expr: Expr) -> Result<(), InterpreterError> {
+        let val = self.interpret_expr(expr)?;
+        println!("{}", self.stringify(&val));
+        Ok(())
+    }
+
+    pub fn interpret_expr(&self, expr: Expr) -> Result<ExprVal, InterpreterError> {
         match expr {
             Expr::Primary(ref token) => Ok(self.literal(&token)),
-            Expr::Grouping(e) => Ok(self.interpret(*e)?),
+            Expr::Grouping(e) => Ok(self.interpret_expr(*e)?),
             Expr::Unary(token, ex) => {
-                let val = self.interpret(*ex)?;
+                let val = self.interpret_expr(*ex)?;
 
                 match token {
                     ParseToken::Bang(..) => Ok(ExprVal::Bool(!val.get_bool()?)),
@@ -116,8 +134,8 @@ impl Interpreter {
                 }
             },
             Expr::Binary(left_side, operator, right_side) => {
-                let left_val = self.interpret(*left_side)?;
-                let right_val = self.interpret(*right_side)?;
+                let left_val = self.interpret_expr(*left_side)?;
+                let right_val = self.interpret_expr(*right_side)?;
 
                 /// Macro that generates a match statement for boolean expressions.
                 macro_rules! bool_impl {
@@ -172,8 +190,22 @@ impl Interpreter {
             &Int(i, ..) => ExprVal::Int(i),
             &Float(f, ..) => ExprVal::Float(f),
             &False(..) => ExprVal::Bool(false),
+            None(..) => ExprVal::None,
             &String(ref s, ..) => ExprVal::String(s.clone()),
             &True(..) => ExprVal::Bool(true),
+            _ => unreachable!(),
+        }
+    }
+
+    fn stringify(&self, val: &ExprVal) -> String {
+        match val {
+            &ExprVal::Int(i) => i.to_string(),
+            &ExprVal::Bool(b) => {
+                if b { "true".to_string() } else { "false".to_string() }
+            },
+            &ExprVal::Float(f, ..) => f.to_string(),
+            &ExprVal::None => "none".to_string(),
+            &ExprVal::String(ref s, ..) => s.clone(),
             _ => unreachable!(),
         }
     }
@@ -188,7 +220,7 @@ mod tests {
             #[test]
             fn $name() {
                 let interpreter = Interpreter::new();
-                let result = interpreter.interpret($input);
+                let result = interpreter.interpret_expr($input);
 
                 assert_eq!(result, Ok($expect));
             }
@@ -206,7 +238,7 @@ mod tests {
             #[test]
             fn $name() {
                 let interpreter = Interpreter::new();
-                let result = interpreter.interpret(Expr::Binary(Box::new(Expr::Primary($left)), $opr, Box::new(Expr::Primary($right))));
+                let result = interpreter.interpret_expr(Expr::Binary(Box::new(Expr::Primary($left)), $opr, Box::new(Expr::Primary($right))));
 
                 assert_eq!(result, Ok($expect));
             }

@@ -10,6 +10,8 @@ use either::Either;
 pub enum TokenError {
     #[fail(display = "Encountered malformed number {} on line {}", _0, _1)]
     MalformedNumber(String, u32),
+    #[fail(display = "Encountered malformed string {} at {}:{}", _0, _1, _2)]
+    InvalidEscapeString(String, u32, u32),
     #[fail(display = "Encountered unexpected character {} on line {}", _0, _1)]
     UnexpectedCharacter(String, u32),
 }
@@ -81,8 +83,8 @@ impl fmt::Display for Token {
             Token::Comma(..) => write!(f, ","),
             Token::Dot(..) => write!(f, "."),
             Token::Colon(..) => write!(f, ":"),
-            Token::LeftParen(..) => write!(f, ")"),
-            Token::RightParen(..) => write!(f, "("),
+            Token::LeftParen(..) => write!(f, "("),
+            Token::RightParen(..) => write!(f, ")"),
             Token::LeftBracket(..) => write!(f, "["),
             Token::RightBracket(..) => write!(f, "]"),
             Token::LeftBrace(..) => write!(f, "{{"),
@@ -417,6 +419,53 @@ impl<'a> TokenIterator<'a> {
                         return Some(Token::Error(TokenError::MalformedNumber(result, stream.row)));
                     },
 
+                    // Parse a string
+                    '"' => {
+                        let mut string = Vec::new();
+                        string.push(stream.chars.next().unwrap());
+
+                        let start_col = stream.col;
+                        let mut end_col = stream.col;
+
+                        let mut invalid_esc = false;
+
+                        while let Some(&c) = stream.chars.peek() {
+                            end_col += 1;
+                            // Check for escaped characters and check if they're valid
+                            if c == '\\' {
+                                string.push(c);
+                                end_col += 1;
+
+                                match stream.chars.next() {
+                                    Some('n') => string.push('n'),
+                                    Some('t') => string.push('t'),
+                                    Some('\\') => string.push('\\'),
+                                    Some('"') => string.push('"'),
+
+                                    _ => invalid_esc = true,
+                                }
+
+                                end_col += 1;
+                            }
+
+                            // End of string reached: consume closing quote
+                            if c == '"' {
+                                stream.chars.next();
+                                break;
+                            }
+                            string.push(stream.chars.next().unwrap());
+                        }
+                        stream.col = end_col;
+
+                        let s: String = string.into_iter().collect();
+
+                        if invalid_esc {
+                            return Some(Token::Error(TokenError::InvalidEscapeString(s, stream.row, start_col)));
+                        }
+
+                        return Some(Token::String(s, stream.row, start_col));
+                    },
+
                     // Parse single character tokens
                     ',' => single_char_token!(Token::Comma),
                     '.' => single_char_token!(Token::Dot),
@@ -649,6 +698,8 @@ mod tests {
                                                         -# and"##, Some(Token::And(4, 60)));
     gen_test!(test_comment_int, r##"# This is a comment
                                     123"##, Some(Token::Int(123, 2, 37)));
+
+    gen_test!(test_string, r#""Hello there""#, Some(Token::String("Hello there".to_string(), 1, 1)));
 
     // Test illegal numbers
     gen_test!(test_illegal_int, "543za", Some(Token::Error(TokenError::MalformedNumber("543za".to_string(), 1))));
