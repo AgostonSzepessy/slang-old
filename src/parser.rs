@@ -71,6 +71,8 @@ pub enum Expr {
     Primary(ParseToken),
     /// Expressions that are within parentheses
     Grouping(Box<Expr>),
+    /// Expression that accesses a variable
+    Var(ParseToken),
 }
 
 /// `Stmt` represents the possible statements that can be created.
@@ -83,6 +85,8 @@ pub enum Stmt {
     Print(Expr),
     /// Expression statements
     Expression(Expr),
+    /// Variable declaration: name of the token, and the initialization expression
+    Variable(ParseToken, Option<Expr>),
 }
 
 #[derive(Debug, PartialEq, Fail)]
@@ -117,10 +121,42 @@ impl<'a> Parser<'a> {
         let mut statements = Vec::new();
 
         while self.tokens.peek() != None {
-            statements.push(self.statement()?);
+            statements.push(self.declaration()?);
         }
 
         Ok(statements)
+    }
+
+    /// Starts parsing a variable declaration.
+    fn declaration(&mut self) -> Result<Stmt, ParseError> {
+        match self.tokens.peek() {
+            None => {
+                Err(ParseError::Eof)
+            },
+            Some(&Token::Let(..)) => { // Check if we need to parse a variable
+                self.tokens.next();
+                return self.finish_var_declaration().map_err(|e| {
+                    // We need to put the parser back on track if it came across an error
+                    self.synchronize();
+                    e
+                });
+            },
+            _ => self.statement(),
+        }
+    }
+
+    /// Finishes parsing a variable
+    fn finish_var_declaration(&mut self) -> Result<Stmt, ParseError> {
+        let token = self.consume(Token::Identifier("".to_string(), 0, 0))?;
+
+        let mut initializer = None;
+        // Check if there's an assignment to an expression
+        if let Some(_) = self.match_token(&[Token::Eq(0, 0)]) {
+            initializer = Some(self.expression()?);
+        }
+
+        self.consume(Token::Semicolon(0, 0))?;
+        Ok(Stmt::Variable(token, initializer))
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseError> {
@@ -206,6 +242,10 @@ impl<'a> Parser<'a> {
             return Ok(Expr::Primary(token));
         }
 
+        if let Some(token) = self.match_token(&[Token::Identifier("".to_string(), 0, 0)]) {
+            return Ok(Expr::Var(token));
+        }
+
         // Found the start of a grouping
         if let Some(_) = self.match_token(&[Token::LeftParen(0, 0)]) {
             let expr = self.expression()?;
@@ -280,9 +320,9 @@ impl<'a> Parser<'a> {
     /// Checks whether the current token is equal to the specified token. If it is, the iterator
     /// advances to the next token. Otherwise, it returns an error.
     /// Parameters: `token`: `Token` to check for.
-    fn consume(&mut self, token: Token) -> Result<(), ParseError> {
-        if let Some(_) = self.match_token(&[(token.clone())]) {
-            return Ok(());
+    fn consume(&mut self, token: Token) -> Result<ParseToken, ParseError> {
+        if let Some(t) = self.match_token(&[(token.clone())]) {
+            return Ok(t);
         }
 
         // Found a different token than the one we expected

@@ -1,6 +1,10 @@
 program -> statement* EOF ;
+declaration -> varDecl
+            | statement ;
+
 statement -> exprStmt | printStmt ;
 printStmt -> "print(" expression ");" ;
+varDecl -> "let" IDENTIFIER ( "=" expression )? ";" ;
 exprStmt -> expression ";" ;
 expression -> equality ;
 equality -> comparison ( ( "!=" | "==" ) comparison )* ;
@@ -8,4 +12,6 @@ comparison -> addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
 addition -> multiplication ( ( "+" | "-" ) multiplication )* ;
 multiplication -> unary ( ( "*" | "/" | "%" ) unary )* ;
 unary -> ( "!" | "-" ) primary | primary ;
-primary -> NUMBER | STRING | "false" | "true" | "none" | "(" expression ")" ;
+primary -> "false" | "true" | "none"
+        | NUMBER | STRING | IDENTIFIER
+        | "(" expression ")" ;
