@@ -1,14 +1,17 @@
-use parser::{Expr, ParseToken, Stmt};
+use parser::{Expr, ParseToken, VarInfo, Stmt};
 
 use std::ops::{Add, Div, Mul, Rem, Sub};
+use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Fail)]
 pub enum InterpreterError {
     #[fail(display = "Type error")]
     TypeError,
+    #[fail(display = "Undefined variable {}", _0)]
+    UndefinedVar(String),
 }
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum ExprVal {
     Int(i64),
     Float(f64),
@@ -42,65 +45,65 @@ impl_arithmetic!(Sub, sub, -);
 impl_arithmetic!(Rem, rem, %);
 impl_arithmetic!(Div, div, /);
 
-
 impl ExprVal {
-    fn is_bool(&self) -> bool {
-        match *self {
-            ExprVal::Bool(..) => true,
-            _ => false,
-        }
-    }
-
     fn get_bool(self) -> Result<bool, InterpreterError> {
         match self {
-            ExprVal::Bool(b) => return Ok(b),
-            _ => Err(InterpreterError::TypeError),
-        }
-    }
-
-    fn is_float(&self) -> bool {
-        match *self {
-            ExprVal::Float(..) => true,
-            _ => false,
-        }
-    }
-
-    fn get_float(self) -> Result<f64, InterpreterError> {
-        match self {
-            ExprVal::Float(f) => return Ok(f),
-            _ => Err(InterpreterError::TypeError),
-        }
-    }
-
-    fn is_string(&self) -> bool {
-        match *self {
-            ExprVal::String(..) => true,
-            _ => false,
-        }
-    }
-
-    fn get_string(self) -> Result<String, InterpreterError> {
-        match self {
-            ExprVal::String(s) => return Ok(s),
+            ExprVal::Bool(b) => Ok(b),
             _ => Err(InterpreterError::TypeError),
         }
     }
 }
 
+/// Environment in which variables are stored. Each lexical scope gets its own
+/// environment.
+#[derive(Debug, PartialEq)]
+struct Env {
+    /// The vaariables stored in this environment
+    values: HashMap<String, ExprVal>,
+}
+
+impl Env {
+    pub fn new() -> Self {
+        Env {
+            values: HashMap::new(),
+        }
+    }
+
+    /// Adds a new variable to the environment. Variables can be redefined.
+    pub fn define(&mut self, name: String, value: ExprVal) {
+        self.values.insert(name, value);
+    }
+
+    pub fn get(&self, name: &str) -> Result<ExprVal, InterpreterError> {
+        match self.values.get(name) {
+            Some(v) => Ok(v.to_owned()),
+            None => return Err(InterpreterError::UndefinedVar(name.to_string())),
+        }
+    }
+}
+
+/// Executes the list of statements that are passed to it. If a runtime error happens,
+/// it returns an `InterpreterError`.
 #[derive(Debug, PartialEq)]
 pub struct Interpreter {
+    env: Env,
 }
 
 impl Interpreter {
+    /// Creates a new interpreter
     pub fn new() -> Self {
         Interpreter {
+            env: Env::new(),
         }
     }
 
-    pub fn interpret(&self, stmts: Vec<Stmt>) -> Result<(), InterpreterError> {
+    /// Executes the list of `Stmt`s that are passed to it. If something goes wrong while executing
+    /// them it will return an `InterpreterError`.
+    pub fn interpret(&mut self, stmts: Vec<Stmt>) -> Result<(), InterpreterError> {
         for stmt in stmts {
             match stmt {
                 Stmt::Print(e) => self.print_stmt(e)?,
+                Stmt::Variable(parse_token, expr) => self.variable_stmt(parse_token, expr)?,
                 _ => unreachable!(),
             };
         }
@@ -108,12 +111,28 @@ impl Interpreter {
         Ok(())
     }
 
+    /// Handles a print statement; it evaluates the arguments within the print statement and then
+    /// displays them on the screen.
     fn print_stmt(&self, expr: Expr) -> Result<(), InterpreterError> {
         let val = self.interpret_expr(expr)?;
         println!("{}", self.stringify(&val));
         Ok(())
     }
 
+    /// Defines a new variable and initializes it with an expression if there is one, or assigns it
+    /// a value of `none`.
+    fn variable_stmt(&mut self, var_info: VarInfo, expr: Option<Expr>) -> Result<(), InterpreterError> {
+        let val = match expr {
+            Some(e) => self.interpret_expr(e)?,
+            None => ExprVal::None,
+        };
+
+        self.env.define(var_info.name, val);
+        Ok(())
+    }
+
+    /// Interprets an expression such as `5 + 3`, or `-3`. Expressions can include arithmetic and
+    /// boolean expressions.
     pub fn interpret_expr(&self, expr: Expr) -> Result<ExprVal, InterpreterError> {
         match expr {
             Expr::Primary(ref token) => Ok(self.literal(&token)),
@@ -179,11 +198,13 @@ impl Interpreter {
 
                     _ => panic!(),
                 }
-            }
-            _ => panic!(),
+            },
+
+            Expr::Var(var_info) => Ok(self.env.get(&var_info.name)?),
         }
     }
 
+    /// Base case for expressions; eventually everything boils down to a literal.
     fn literal(&self, token: &ParseToken) -> ExprVal {
         use parser::ParseToken::*;
         match token {
@@ -197,6 +218,7 @@ impl Interpreter {
         }
     }
 
+    /// Converts the `ExprVal` to a `String`.
     fn stringify(&self, val: &ExprVal) -> String {
         match val {
             &ExprVal::Int(i) => i.to_string(),
@@ -271,4 +293,32 @@ mod tests {
 
     gen_binary_test!(test_eqeq_float_int, ParseToken::Int(1, 0, 0), ParseToken::EqEq(0, 0), ParseToken::Float(1.0, 0, 0), ExprVal::Bool(false));
     gen_binary_test!(test_neeq_float_int, ParseToken::Int(1, 0, 0), ParseToken::BangEq(0, 0), ParseToken::Float(1.0, 0, 0), ExprVal::Bool(true));
+
+    #[test]
+    fn test_var_decl_with_val() {
+        let var_info = VarInfo::new("var".to_string(), 0, 0);
+        let expr = Some(Expr::Primary(ParseToken::Int(5, 0, 0)));
+        let mut interpreter = Interpreter::new();
+        assert_eq!(interpreter.variable_stmt(var_info, expr), Ok(()));
+    }
+
+    #[test]
+    fn test_var_decl() {
+        let var_info = VarInfo::new("var".to_string(), 0, 0);
+        let expr = None;
+        let mut interpreter = Interpreter::new();
+        assert_eq!(interpreter.variable_stmt(var_info, expr), Ok(()));
+
+    }
+
+    #[test]
+    fn test_get_var() {
+        let var_info = VarInfo::new("var".to_string(), 0, 0);
+        let val = ExprVal::Int(5);
+        let mut interpreter = Interpreter::new();
+        interpreter.env.define("var".to_string(), val);
+        let expr = Expr::Var(var_info);
+
+        assert_eq!(interpreter.interpret_expr(expr), Ok(ExprVal::Int(5)));
+    }
 }

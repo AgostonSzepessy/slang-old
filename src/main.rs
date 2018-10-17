@@ -26,6 +26,6 @@ fn main() {
     let mut parser = Parser::new(tokenizer);
     let stmts = parser.parse().unwrap();
 
-    let interpreter = Interpreter::new();
+    let mut interpreter = Interpreter::new();
     interpreter.interpret(stmts);
 }

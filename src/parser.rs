@@ -34,6 +34,7 @@ pub enum ParseToken {
     Float(f64, u32, u32),
     True(u32, u32),
     String(String, u32, u32),
+    Identifier(String, u32, u32),
     None(u32, u32),
 
     /// Used to represent a token that doesn't get included in the AST
@@ -49,6 +50,25 @@ impl fmt::Display for TokenVec {
         // Convert tokens into a comma separated list
         let output = self.0[..].iter().map(|x| x.to_string()).collect::<Vec<_>>().join(", ");
         write!(f, "{}", output)
+    }
+}
+
+/// Stores the name of a variable, along with the row and column on which it was used.
+#[derive(Debug, PartialEq)]
+pub struct VarInfo {
+    pub name: String,
+    pub row: u32,
+    pub col: u32,
+}
+
+impl VarInfo {
+    /// Creates a new `VarInfo` with the specified parameters.
+    pub fn new(name: String, row: u32, col: u32) -> Self {
+        VarInfo {
+            name: name,
+            row: row,
+            col: col,
+        }
     }
 }
 
@@ -72,7 +92,7 @@ pub enum Expr {
     /// Expressions that are within parentheses
     Grouping(Box<Expr>),
     /// Expression that accesses a variable
-    Var(ParseToken),
+    Var(VarInfo),
 }
 
 /// `Stmt` represents the possible statements that can be created.
@@ -86,7 +106,7 @@ pub enum Stmt {
     /// Expression statements
     Expression(Expr),
     /// Variable declaration: name of the token, and the initialization expression
-    Variable(ParseToken, Option<Expr>),
+    Variable(VarInfo, Option<Expr>),
 }
 
 #[derive(Debug, PartialEq, Fail)]
@@ -134,7 +154,6 @@ impl<'a> Parser<'a> {
                 Err(ParseError::Eof)
             },
             Some(&Token::Let(..)) => { // Check if we need to parse a variable
-                self.tokens.next();
                 return self.finish_var_declaration().map_err(|e| {
                     // We need to put the parser back on track if it came across an error
                     self.synchronize();
@@ -147,7 +166,17 @@ impl<'a> Parser<'a> {
 
     /// Finishes parsing a variable
     fn finish_var_declaration(&mut self) -> Result<Stmt, ParseError> {
+        // Consume "let" token
+        self.tokens.next();
         let token = self.consume(Token::Identifier("".to_string(), 0, 0))?;
+
+        // This is pretty ugly, but we need to convert the ParseToken::Identifier to a struct
+        // so that it's easier later on to process the data about the variable
+        let var_info = if let ParseToken::Identifier(n, r, c) = token {
+            VarInfo::new(n, r, c)
+        } else {
+            unreachable!();
+        };
 
         let mut initializer = None;
         // Check if there's an assignment to an expression
@@ -156,7 +185,7 @@ impl<'a> Parser<'a> {
         }
 
         self.consume(Token::Semicolon(0, 0))?;
-        Ok(Stmt::Variable(token, initializer))
+        Ok(Stmt::Variable(var_info, initializer))
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseError> {
@@ -243,7 +272,11 @@ impl<'a> Parser<'a> {
         }
 
         if let Some(token) = self.match_token(&[Token::Identifier("".to_string(), 0, 0)]) {
-            return Ok(Expr::Var(token));
+            let var_info = match token {
+                ParseToken::Identifier(n, r, c) => VarInfo::new(n, r, c),
+                _ => unreachable!(),
+            };
+            return Ok(Expr::Var(var_info));
         }
 
         // Found the start of a grouping
@@ -306,6 +339,7 @@ impl<'a> Parser<'a> {
                 Float(f, c, r) => Some(ParseToken::Float(f, c, r)),
                 False(c, r) => Some(ParseToken::False(c, r)),
                 String(s, c, r) => Some(ParseToken::String(s, c, r)),
+                Identifier(s, c, r) => Some(ParseToken::Identifier(s, c, r)),
                 True(c, r) => Some(ParseToken::True(c, r)),
                 LeftParen(..) | RightParen(..) => Some(ParseToken::DiscardedToken),
                 Semicolon(..) => Some(ParseToken::DiscardedToken),
@@ -412,6 +446,15 @@ mod tests {
     primary_test!(test_none, Token::None(0, 0), ParseToken::None(0, 0));
 
     #[test]
+    fn test_identifier_use() {
+        let token_vec = vec![Token::Identifier("var".to_string(), 0, 0)];
+        let tokens = TokenIterator::from(&token_vec);
+        let mut parser = Parser::new(tokens);
+        let var_info = VarInfo::new("var".to_string(), 0, 0);
+        assert_eq!(parser.expression(), Ok(Expr::Var(var_info)));
+    }
+
+    #[test]
     fn test_unary_minus() {
         let token_vec = vec![Token::Minus(0, 0), Token::Int(1, 0, 0)];
         let tokens = TokenIterator::from(&token_vec);
@@ -435,4 +478,21 @@ mod tests {
         assert_eq!(parser.expression(), Err(ParseError::UnexpectedExpression(Token::Plus(0, 0))));
     }
 
+    #[test]
+    fn test_let_val() {
+        let token_vec = vec![Token::Let(0, 0), Token::Identifier("var".to_string(), 0, 0), Token::Eq(0, 0), Token::Int(5, 0, 0), Token::Semicolon(0, 0)];
+        let tokens = TokenIterator::from(&token_vec);
+        let mut parser = Parser::new(tokens);
+        let var_info = VarInfo::new("var".to_string(), 0, 0);
+        assert_eq!(parser.parse(), Ok(vec![Stmt::Variable(var_info, Some(Expr::Primary(ParseToken::Int(5, 0, 0))))]));
+    }
+
+    #[test]
+    fn test_let() {
+        let token_vec = vec![Token::Let(0, 0), Token::Identifier("var".to_string(), 0, 0), Token::Semicolon(0, 0)];
+        let tokens = TokenIterator::from(&token_vec);
+        let mut parser = Parser::new(tokens);
+        let var_info = VarInfo::new("var".to_string(), 0, 0);
+        assert_eq!(parser.parse(), Ok(vec![Stmt::Variable(var_info, None)]));
+    }
 }
