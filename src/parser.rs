@@ -83,6 +83,8 @@ impl VarInfo {
 /// such as `(5 + 3)`.
 #[derive(Debug, PartialEq)]
 pub enum Expr {
+    /// Variable assignment expression
+    Assign(VarInfo, Box<Expr>),
     /// Expressions that have 2 operands
     Binary(Box<Expr>, ParseToken, Box<Expr>),
     /// Expressions that have 1 operand
@@ -92,7 +94,7 @@ pub enum Expr {
     /// Expressions that are within parentheses
     Grouping(Box<Expr>),
     /// Expression that accesses a variable
-    Var(VarInfo),
+    Variable(VarInfo),
 }
 
 /// `Stmt` represents the possible statements that can be created.
@@ -121,6 +123,8 @@ pub enum ParseError {
     UnexpectedToken(Token, Token),
     #[fail(display = "Error: expected an expression after {}", _0)]
     NoExpression(Token),
+    #[fail(display = "Error: invalid assignment target {}", _0)]
+    InvalidAssignment(Token),
     #[fail(display = "Error: expected an expression but end of file was reached")]
     Eof,
 }
@@ -189,17 +193,17 @@ impl<'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseError> {
-        match self.tokens.next() {
+        match self.tokens.peek() {
             None => Err(ParseError::Eof),
-            Some(Token::Print(..)) => Ok(self.finish_print_stmt()?),
-            _ => Ok(Stmt::Expression(self.expression()?)),
+            Some(&Token::Print(..)) => self.finish_print_stmt(),
+            _ => self.expression_stmt(),
         }
     }
 
     /// Creates a Print statement
     fn finish_print_stmt(&mut self) -> Result<Stmt, ParseError> {
-        // Print token has already been consumed so we need to consume
-        // the right parenthesis
+        // Consume "print" token 
+        self.tokens.next();
         self.consume(Token::LeftParen(0, 0))?;
         let expr = self.expression()?;
         self.consume(Token::RightParen(0, 0))?;
@@ -208,8 +212,32 @@ impl<'a> Parser<'a> {
         Ok(Stmt::Print(expr))
     }
 
+    fn expression_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let expr = self.expression()?;
+        self.consume(Token::Semicolon(0, 0))?;
+
+        Ok(Stmt::Expression(expr))
+    }
+
     fn expression(&mut self) -> Result<Expr, ParseError> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Result<Expr, ParseError> {
+        let expr = self.equality()?;
+
+        if let Some(_) = self.match_token(&[Token::Eq(0, 0)]) {
+            let equals = self.tokens.prev().unwrap();
+            let value = self.assignment()?;
+
+            if let Expr::Variable(var_info) = expr {
+                return Ok(Expr::Assign(var_info, Box::new(value)));
+            }
+
+            return Err(ParseError::InvalidAssignment(equals));
+        }
+
+        Ok(expr)
     }
     
     fn equality(&mut self) -> Result<Expr, ParseError> {
@@ -276,7 +304,7 @@ impl<'a> Parser<'a> {
                 ParseToken::Identifier(n, r, c) => VarInfo::new(n, r, c),
                 _ => unreachable!(),
             };
-            return Ok(Expr::Var(var_info));
+            return Ok(Expr::Variable(var_info));
         }
 
         // Found the start of a grouping
@@ -451,7 +479,7 @@ mod tests {
         let tokens = TokenIterator::from(&token_vec);
         let mut parser = Parser::new(tokens);
         let var_info = VarInfo::new("var".to_string(), 0, 0);
-        assert_eq!(parser.expression(), Ok(Expr::Var(var_info)));
+        assert_eq!(parser.expression(), Ok(Expr::Variable(var_info)));
     }
 
     #[test]

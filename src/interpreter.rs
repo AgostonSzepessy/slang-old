@@ -74,6 +74,17 @@ impl Env {
         self.values.insert(name, value);
     }
 
+    /// Changes the value of a variable
+    pub fn assign(&mut self, name: String, value: ExprVal) -> Result<(), InterpreterError> {
+        if self.values.contains_key(&name) {
+            self.values.insert(name, value);
+            Ok(())
+        } else {
+            Err(InterpreterError::UndefinedVar(name))
+        }
+    }
+
+    /// Retrieves the value of a variable
     pub fn get(&self, name: &str) -> Result<ExprVal, InterpreterError> {
         match self.values.get(name) {
             Some(v) => Ok(v.to_owned()),
@@ -102,8 +113,9 @@ impl Interpreter {
     pub fn interpret(&mut self, stmts: Vec<Stmt>) -> Result<(), InterpreterError> {
         for stmt in stmts {
             match stmt {
-                Stmt::Print(e) => self.print_stmt(e)?,
+                Stmt::Print(expr) => self.print_stmt(expr)?,
                 Stmt::Variable(parse_token, expr) => self.variable_stmt(parse_token, expr)?,
+                Stmt::Expression(expr) => self.interpret_expr(expr).map(|_| ())?, // We can discard the value of the expression
                 _ => unreachable!(),
             };
         }
@@ -113,7 +125,7 @@ impl Interpreter {
 
     /// Handles a print statement; it evaluates the arguments within the print statement and then
     /// displays them on the screen.
-    fn print_stmt(&self, expr: Expr) -> Result<(), InterpreterError> {
+    fn print_stmt(&mut self, expr: Expr) -> Result<(), InterpreterError> {
         let val = self.interpret_expr(expr)?;
         println!("{}", self.stringify(&val));
         Ok(())
@@ -133,7 +145,7 @@ impl Interpreter {
 
     /// Interprets an expression such as `5 + 3`, or `-3`. Expressions can include arithmetic and
     /// boolean expressions.
-    pub fn interpret_expr(&self, expr: Expr) -> Result<ExprVal, InterpreterError> {
+    pub fn interpret_expr(&mut self, expr: Expr) -> Result<ExprVal, InterpreterError> {
         match expr {
             Expr::Primary(ref token) => Ok(self.literal(&token)),
             Expr::Grouping(e) => Ok(self.interpret_expr(*e)?),
@@ -200,7 +212,12 @@ impl Interpreter {
                 }
             },
 
-            Expr::Var(var_info) => Ok(self.env.get(&var_info.name)?),
+            Expr::Variable(var_info) => Ok(self.env.get(&var_info.name)?),
+            Expr::Assign(var_info, expr) => {
+                let value = self.interpret_expr(*expr)?;
+                self.env.assign(var_info.name, value.clone())?;
+                Ok(value)
+            }
         }
     }
 
@@ -241,7 +258,7 @@ mod tests {
         ($name: ident, $input: expr, $expect: expr) => {
             #[test]
             fn $name() {
-                let interpreter = Interpreter::new();
+                let mut interpreter = Interpreter::new();
                 let result = interpreter.interpret_expr($input);
 
                 assert_eq!(result, Ok($expect));
@@ -259,7 +276,7 @@ mod tests {
         ($name: ident, $left: expr, $opr: expr, $right: expr, $expect: expr) => {
             #[test]
             fn $name() {
-                let interpreter = Interpreter::new();
+                let mut interpreter = Interpreter::new();
                 let result = interpreter.interpret_expr(Expr::Binary(Box::new(Expr::Primary($left)), $opr, Box::new(Expr::Primary($right))));
 
                 assert_eq!(result, Ok($expect));
@@ -317,7 +334,7 @@ mod tests {
         let val = ExprVal::Int(5);
         let mut interpreter = Interpreter::new();
         interpreter.env.define("var".to_string(), val);
-        let expr = Expr::Var(var_info);
+        let expr = Expr::Variable(var_info);
 
         assert_eq!(interpreter.interpret_expr(expr), Ok(ExprVal::Int(5)));
     }
