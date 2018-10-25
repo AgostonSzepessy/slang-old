@@ -1,5 +1,5 @@
 # Slang
-[![Build Status](https://jenkins.agoston.codes/buildStatus/icon?job=slang)](https://jenkins.agoston.codes/job/slang/)
+[![Build Status](https://travis-ci.com/AgostonSzepessy/slang.svg?token=UcN43eD9yZ9KpnTrkLSP&branch=master)](https://travis-ci.com/AgostonSzepessy/slang)
 
 Slang is a simple scripting language.
 
