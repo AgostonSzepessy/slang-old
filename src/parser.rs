@@ -103,10 +103,12 @@ pub enum Expr {
 /// * `Expression`: Represents an expression
 #[derive(Debug, PartialEq)]
 pub enum Stmt {
-    /// Print statements
-    Print(Expr),
+    /// Block with statements
+    Block(Vec<Stmt>),
     /// Expression statements
     Expression(Expr),
+    /// Print statements
+    Print(Expr),
     /// Variable declaration: name of the token, and the initialization expression
     Variable(VarInfo, Option<Expr>),
 }
@@ -196,6 +198,7 @@ impl<'a> Parser<'a> {
         match self.tokens.peek() {
             None => Err(ParseError::Eof),
             Some(&Token::Print(..)) => self.finish_print_stmt(),
+            Some(&Token::LeftBrace(..)) => self.block(),
             _ => self.expression_stmt(),
         }
     }
@@ -217,6 +220,18 @@ impl<'a> Parser<'a> {
         self.consume(Token::Semicolon(0, 0))?;
 
         Ok(Stmt::Expression(expr))
+    }
+
+    fn block(&mut self) -> Result<Stmt, ParseError> {
+        // Consume left brace
+        self.tokens.next();
+        let mut stmts = Vec::new();
+
+        // TODO: add code to handle braces here
+
+        loop {
+
+        }
     }
 
     fn expression(&mut self) -> Result<Expr, ParseError> {
@@ -419,6 +434,16 @@ impl<'a> Parser<'a> {
                 | While(..) => return,
 
                 _ => { self.tokens.next(); continue },
+            }
+        }
+    }
+
+    fn check(&self, token: Token) -> bool {
+        if let Some(tok) = self.tokens.peek() {
+            if tok == token {
+                true
+            } else {
+                false
             }
         }
     }

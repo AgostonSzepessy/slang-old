@@ -3,7 +3,11 @@ program -> statement* EOF ;
 declaration -> varDecl
             | statement ;
 
-statement -> exprStmt | printStmt ;
+statement -> exprStmt 
+            | printStmt 
+            | block ;
+
+block -> "{" declaration* "}" ;
 
 printStmt -> "print(" expression ");" ;
 

@@ -60,12 +60,21 @@ impl ExprVal {
 struct Env {
     /// The vaariables stored in this environment
     values: HashMap<String, ExprVal>,
+    enclosing: Option<Box<Env>>,
 }
 
 impl Env {
     pub fn new() -> Self {
         Env {
             values: HashMap::new(),
+            enclosing: None,
+        }
+    }
+
+    pub fn from_enclosing(enclosing: Env) -> Self {
+        Env {
+            values: HashMap::new(),
+            enclosing: Some(Box::new(enclosing)),
         }
     }
 
@@ -87,9 +96,17 @@ impl Env {
     /// Retrieves the value of a variable
     pub fn get(&self, name: &str) -> Result<ExprVal, InterpreterError> {
         match self.values.get(name) {
-            Some(v) => Ok(v.to_owned()),
-            None => return Err(InterpreterError::UndefinedVar(name.to_string())),
+            Some(v) => return Ok(v.to_owned()),
+            None => {
+                // Check if outer scope has variable
+                if let Some(ref enclosing) = self.enclosing {
+                    return enclosing.get(name);
+                }
+            },
         }
+
+        // Couldn't find variable
+        Err(InterpreterError::UndefinedVar(name.to_string()))
     }
 }
 
